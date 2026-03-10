@@ -10,7 +10,7 @@ B) iOS only
 C) Both Android and iOS
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: B
 
 ## Question 2
 What is the primary app use case for this hybrid LLM inference system?
@@ -21,7 +21,7 @@ C) Offline-first knowledge assistant
 D) Voice assistant
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: X Domain specific shopping planning assistant. 
 
 ## Question 3
 How should routing between on-device and server inference be decided?
@@ -32,7 +32,7 @@ C) User-selectable mode (device/server/auto)
 D) Rule-based by prompt category (privacy/latency/complexity)
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: A
 
 ## Question 4
 What is the latency target for first token response?
@@ -43,7 +43,7 @@ C) <= 2 seconds
 D) Best effort (no strict target)
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: D
 
 ## Question 5
 What privacy/data policy should be enforced for prompts and responses?
@@ -54,7 +54,7 @@ C) User consent per request before sending to server
 D) Full server processing allowed
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: B
 
 ## Question 6
 What should the server-side inference stack target initially?
@@ -65,7 +65,7 @@ C) Node.js + Python inference worker
 D) Rust/C++ inference service
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: X llm-d and maybe even chutes.ai 
 
 ## Question 7
 How should Cactus inference integration be delivered on mobile in v1?
@@ -75,7 +75,7 @@ B) Hybrid wrapper with optional fallback to bundled lightweight runtime
 C) Plugin-style abstraction to swap engines later
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: A
 
 ## Question 8
 What model sizing/quantization should be targeted on-device for Qwen3 in v1?
@@ -86,7 +86,7 @@ C) Multi-tier model packs selected by device capability
 D) You decide best practical default
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: X Decide based on iterative efficient fine tuning (QAT), evaluations on server side using deepevals and performance benchmarks on device.
 
 ## Question 9
 What level of production hardening is expected now?
@@ -96,7 +96,7 @@ B) Production-ready baseline (auth, rate limit, observability, CI checks)
 C) Enterprise-grade (advanced compliance/security controls)
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: A
 
 ## Question 10: Security Extensions
 Should security extension rules be enforced for this project?
@@ -105,4 +105,4 @@ A) Yes — enforce all SECURITY rules as blocking constraints (recommended for p
 B) No — skip all SECURITY rules (suitable for PoCs, prototypes, and experimental projects)
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: 
+[Answer]: Skip security for now but design server using Edgeless Systems Contrast as confidential AI solution. 
