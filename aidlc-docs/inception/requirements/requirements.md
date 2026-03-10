@@ -111,6 +111,54 @@ Build a domain-specific shopping planning assistant that supports hybrid inferen
 - User asks why specific products/quantities were recommended.
 - System returns concise rationale, generated on-device when feasible and via server fallback for higher-complexity explanation synthesis.
 
+### UC-08 Preference Memory Across Sessions
+- User teaches long-term preferences over multiple chats (favorite brands, disliked ingredients, price sensitivity).
+- AI memory stores and reuses these preferences in future sessions to avoid repeated user re-entry and improve recommendation relevance.
+
+### UC-09 Pantry and Purchase History Continuity
+- User updates pantry state and marks purchased items over time in multi-turn conversations.
+- Memory tracks inventory and recent purchases so subsequent plans avoid duplicates and prioritize depleted items.
+
+### UC-10 Recurring Shopping Routine Builder
+- User iteratively defines weekly/biweekly shopping routines in several conversation turns.
+- Memory captures recurring cadence and category templates, enabling one-shot generation of future routine-specific plans.
+
+### UC-11 Event Planning Thread Persistence
+- User plans for events (party, travel, holiday) over several days with evolving constraints.
+- Memory preserves event context, guest counts, and prior decisions so the assistant can continue planning without restarting context each session.
+
+### UC-12 Goal-Driven Budget Coaching
+- User sets monthly budget goals and revisits them across multiple interactions.
+- Memory retains prior budget decisions, substitutions, and spend patterns to provide longitudinal coaching and adaptive optimization suggestions.
+
+### UC-13 Personalized Clarification Reduction
+- User repeatedly responds to preference-clarification prompts in early sessions.
+- Memory learns stable user traits and reduces repetitive follow-up questions in later multi-turn conversations, improving UX efficiency.
+
+### UC-14 Context-Rot Signal Detection in Long Conversations
+- User runs extended multi-turn planning sessions over many edits and topic shifts.
+- Assistant detects context-rot signals (contradictions, stale assumptions, low-reference grounding) and flags confidence degradation before giving final recommendations.
+
+### UC-15 Memory Freshness Validation and Repair
+- User asks for updated plans after lifestyle or preference changes.
+- System validates memory freshness (last-confirmed timestamps and conflict checks), prompts selective reconfirmation, and repairs outdated memory slots instead of silently using stale context.
+
+### UC-16 Context Integrity Checkpointing
+- During iterative planning, user reaches key milestones (budget finalized, dietary constraints locked, store selected).
+- Assistant creates checkpoint summaries and reuses them as canonical context anchors to prevent drift and recover from context rot in later turns.
+
+### UC-17 Data Sufficiency Readiness Indicator
+- User expects personalized planning quality but has provided limited profile/history data.
+- Assistant computes and displays a readiness status (e.g., insufficient/partial/sufficient) showing whether available user data is enough for desired planning support quality.
+
+### UC-18 Guided Data Completion for Better Personalization
+- When readiness is insufficient, assistant asks targeted multi-turn questions (constraints, pantry baseline, budget bands, recurring items) to close the minimum data gap.
+- System shows progress toward sufficiency so users know when data quality has reached reliable-support thresholds.
+
+### UC-19 Fine-Tuning Recommendation Trigger
+- User requests higher consistency/accuracy than current memory+prompt adaptation can provide.
+- Assistant identifies persistent failure patterns from evaluations and interaction logs, then recommends model fine-tuning only when thresholds indicate that additional user data alone is no longer sufficient.
+
 ## Constraints and Assumptions
 - Cactus engine availability and integration on iOS is assumed for v1.
 - Qwen3 model variants used must be compatible with Cactus runtime constraints.
