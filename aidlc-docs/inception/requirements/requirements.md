@@ -81,6 +81,36 @@ Build a domain-specific shopping planning assistant that supports hybrid inferen
 - If on-device path cannot meet quality/capability thresholds, request is routed to server `llm-d` backend.
 - User receives a response regardless of route, while system captures route and audit metadata.
 
+## Functional Use Cases (Supported by Hybrid Architecture)
+
+### UC-01 Conversational Shopping List Generation
+- User describes shopping goals (e.g., weekly groceries, event shopping).
+- On-device Cactus + Qwen3 path produces a structured shopping list with categories and quantities.
+
+### UC-02 Budget-Aware Basket Optimization
+- User provides a budget ceiling and preference constraints.
+- System computes an initial plan on-device, then falls back to server `llm-d` when optimization complexity exceeds device confidence/capability.
+
+### UC-03 Dietary and Preference-Constrained Planning
+- User requests plans filtered by dietary rules (e.g., vegan, low-sodium, allergen exclusions).
+- Routing policy keeps simple constraint handling on-device and escalates nuanced multi-constraint reasoning to server when needed.
+
+### UC-04 Store-Specific Plan Adaptation
+- User asks to tailor shopping output for a selected store or catalog context.
+- On-device handles base adaptation; server fallback is used for deeper ranking/suggestion quality improvements.
+
+### UC-05 Offline Shopping Assistant Mode
+- User interacts in low/no connectivity conditions.
+- App continues responding using on-device inference as primary mode, preserving core planning functionality without server dependence.
+
+### UC-06 Multi-Turn Plan Refinement
+- User iteratively refines a shopping plan through follow-up prompts (replace items, adjust quantities, reprioritize).
+- Architecture supports seamless transition between on-device and server inference while maintaining a consistent conversation experience.
+
+### UC-07 Explainability and Rationale Summaries
+- User asks why specific products/quantities were recommended.
+- System returns concise rationale, generated on-device when feasible and via server fallback for higher-complexity explanation synthesis.
+
 ## Constraints and Assumptions
 - Cactus engine availability and integration on iOS is assumed for v1.
 - Qwen3 model variants used must be compatible with Cactus runtime constraints.
