@@ -8,6 +8,7 @@ This document consolidates application-level design artifacts for the hybrid sho
 - `component-methods.md`
 - `services.md`
 - `component-dependency.md`
+- `unsloth-phone-reuse-extraction.md`
 
 ## Design Summary
 - Architecture is split into client UX, routing/policy core, inference adapters, memory/context reliability modules, and telemetry/evaluation modules.
@@ -39,3 +40,7 @@ This document consolidates application-level design artifacts for the hybrid sho
 - Each critical requirement area maps to at least one component and one service.
 - User-story critical paths (routing transparency, memory continuity, context-rot recovery, readiness, fine-tuning signal) are represented in interfaces and dependencies.
 - Detailed business logic intentionally deferred to Functional Design stage.
+
+## External Reuse Inputs
+- Reusable phone-deployment components and design decisions extracted from Unsloth + ExecuTorch references are documented in `unsloth-phone-reuse-extraction.md`.
+- These reuse inputs should be treated as constraints/guidance for Units Generation, Functional Design, and NFR stages.

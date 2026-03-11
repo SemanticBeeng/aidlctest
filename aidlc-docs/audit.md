@@ -217,3 +217,11 @@ On the device use cactus inference engine. In terms of LLM we start with Qwen3."
 **Context**: Awaiting explicit user approval before Units Generation.
 
 ---
+
+## Application Design - External Research Integration
+**Timestamp**: 2026-03-11T17:00:34Z
+**User Input**: "Study https://unsloth.ai/docs/basics/inference-and-deployment/deploy-llms-phone and referenced code https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Qwen3_(0_6B)-Phone_Deployment.ipynb and extract components and designdecisions to reuse"
+**AI Response**: "Extracted reusable components and design decisions into unsloth-phone-reuse-extraction.md and linked it from application-design.md for downstream stages."
+**Context**: Application Design refinements requested before approval.
+
+---
