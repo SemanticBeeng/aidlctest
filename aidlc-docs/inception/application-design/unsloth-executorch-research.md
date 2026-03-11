@@ -3,8 +3,10 @@
 > **Sources studied**:
 > - https://unsloth.ai/docs/basics/inference-and-deployment/deploy-llms-phone
 > - Colab notebook: `Qwen3_(0_6B)-Phone_Deployment.ipynb`
+> - https://cactuscompute.com/docs (Cactus v1.7 docs — verification pass)
 >
 > **Date**: 2026-03-11
+> **Last updated**: 2026-03-11 (added Cactus v1 verification findings)
 
 ---
 
@@ -55,7 +57,7 @@
 - `-X --xnnpack-extended-ops` — XNNPACK CPU backend with extended operations
 - `--metadata '{"get_bos_id":199999, "get_eos_ids":[200020,199999]}'` — Qwen3 tokenizer special tokens
 
-**Reuse Decision**: This is the **critical tension point** with our current architecture. Our design specifies **Cactus inference engine** (GGUF-based), not ExecuTorch (.pte-based). See Section 3 for architectural implications.
+**Reuse Decision**: This is the **critical tension point** with our current architecture. Our design specifies **Cactus inference engine**. Note: Cactus v1 has moved from GGUF to a proprietary `.cact` format (see Section 3), making the gap wider than originally assumed. See Section 3 for architectural implications.
 
 ### 1.4 iOS Deployment Components (ExecuTorch Runtime)
 
@@ -129,50 +131,106 @@ From export logs:
 
 ---
 
-## 3. Architectural Tension: Cactus (GGUF) vs ExecuTorch (.pte)
+## 3. Architectural Tension: Cactus v1 (.cact) vs ExecuTorch (.pte)
 
-### Current Architecture Assumption
-Our FR-04 and C02 specify **Cactus inference engine** with a native iOS wrapper. Cactus is ggml/llama.cpp-based and uses **GGUF** model format.
+> **CORRECTION (2026-03-11)**: Initial research assumed Cactus was GGUF/llama.cpp-based.
+> Verification against Cactus v1.7 docs revealed Cactus has its own engine, proprietary
+> `.cact` format, and built-in hybrid routing. All comparisons updated below.
+
+### Current Architecture Assumption (CORRECTED)
+Our FR-04 and C02 specify **Cactus inference engine** with a native iOS wrapper. Cactus v1 is **NOT** a llama.cpp wrapper — it is a standalone engine with three layers:
+- **Cactus Engine**: Energy-efficient inference with OpenAI-compatible APIs (C/C++, Swift, Kotlin, Flutter), tool calling, auto RAG, NPU acceleration, INT4 quantization, and hybrid cloud handoff
+- **Cactus Graph**: Zero-copy computation graph with PyTorch-like API for custom models, optimized for RAM efficiency and lossless weight quantization
+- **Cactus Kernels**: Low-level ARM SIMD kernels optimized for Apple, Snapdragon, Google, Exynos, and MediaTek processors with custom attention kernels, KV-Cache quantization, and chunked prefill
+
+Model format is proprietary **`.cact`** — not GGUF.
+
+### Cactus Built-In Hybrid Routing (Overlap with C03)
+Cactus v1 includes **confidence-based hybrid routing** that automatically switches between on-device and cloud inference. This directly overlaps with our C03 Routing Policy Engine design:
+- Smart routing: dynamically routes to on-device NPU/CPU for simple tasks, cloud for complex ones
+- Cloud fallback: configurable via `cactus auth` with fallback model selection
+- Confidence monitoring: measures model confidence in real-time and routes accordingly
+- Context window overflow handling: auto-failover when local model cannot handle context
+
+**Architectural implication**: If we use Cactus, our C03 may need to either wrap/extend Cactus's routing or be redesigned as a policy layer on top of Cactus's built-in routing.
+
+### Cactus v1 Performance Benchmarks (INT8 quantized)
+
+| Device | LLM Performance | RAM |
+|---|---|---|
+| iPhone 17 Pro | 300/33 tps (prompt/gen) | 108 MB |
+| iPad/Mac M4 | 379/46 tps | 30 MB |
+| iPad/Mac M2 | 315/42 tps | 181 MB |
+| Mac M4 Pro | 582/77 tps | 76 MB |
+| Galaxy S25 Ultra | 226/36 tps | 1.2 GB |
+
+**Note**: These benchmarks use INT8 quantized models on Cactus's own format. The RAM figures are dramatically lower than ExecuTorch's ~716 MB footprint for 0.6B, suggesting Cactus's zero-copy memory mapping is highly effective.
 
 ### Unsloth/ExecuTorch Approach
 The studied pipeline uses **ExecuTorch** runtime with **XNNPACK** backend and **.pte** model format. This is Meta's official mobile inference framework.
 
-### Comparison Matrix
+### Comparison Matrix (CORRECTED)
 
-| Dimension | Cactus (GGUF) | ExecuTorch (.pte) |
+| Dimension | Cactus v1 (.cact) | ExecuTorch (.pte) |
 |---|---|---|
-| Model format | GGUF | .pte (ExecuTorch Program) |
-| Quantization | GGML quantization (Q4_K_M, Q5_K_M, etc.) | TorchAO QAT (int8-int4) |
-| Backend | llama.cpp / Metal | XNNPACK (CPU) / CoreML / Metal |
-| Accuracy recovery | PTQ-based (lower recovery) | QAT-based (~70% accuracy recovery) |
-| Training pipeline | Separate (any trainer → GGUF convert) | Integrated (Unsloth QAT → export_llama → .pte) |
-| iOS integration | C library wrapper | Swift/ObjC ExecuTorch runtime |
-| Maturity for Qwen3 | Depends on ggml Qwen3 support | Officially supported by Unsloth + ExecuTorch |
-| Model loading | File-based | File-based |
-| Community/support | llama.cpp community | Meta / PyTorch Foundation |
+| Model format | `.cact` (proprietary, zero-copy) | `.pte` (ExecuTorch Program) |
+| Quantization | Own INT4/INT8 with lossless weight quant | TorchAO QAT (int8-int4) |
+| Backend | Cactus Kernels (ARM SIMD) + NPU | XNNPACK (CPU) / CoreML / Metal |
+| NPU acceleration | Yes (Apple, Snapdragon, Exynos, MediaTek) | No (CPU-only in default pipeline) |
+| Accuracy recovery | Unknown (proprietary quantization) | QAT-based (~70% accuracy recovery) |
+| Training pipeline | No integrated training; needs converter to `.cact` | Integrated (Unsloth QAT → export_llama → .pte) |
+| Hybrid routing | **Built-in** (confidence-based cloud fallback) | None (app-level only) |
+| iOS integration | Swift SDK | Swift/ObjC ExecuTorch runtime |
+| Maturity for Qwen3 | Check supported model list (may need request) | Officially supported by Unsloth + ExecuTorch |
+| RAM efficiency | Very high (zero-copy memory mapping) | Standard (~716 MB for 0.6B) |
+| Model loading | File-based (`.cact`) | File-based (`.pte` + `tokenizer.json`) |
+| Community/support | Cactus Compute (YC-backed startup) | Meta / PyTorch Foundation |
+| Open source | Partially (SDK open, format proprietary) | Fully open source |
+| Pricing | Free tier + paid features | Free |
 
-### Options for Our Project
+### QAT Compatibility with Cactus
 
-**Option A: Stay with Cactus (GGUF)**
+**Statement investigated**: "If training LLM with QAT then cannot be used with Cactus"
+
+| Step | Compatible? | Details |
+|---|---|---|
+| QAT training → HuggingFace checkpoint | Yes | QAT model saves as standard weights |
+| HuggingFace checkpoint → `.cact` conversion | Unknown | Depends on Cactus converter supporting the architecture |
+| QAT accuracy benefit preserved through `.cact` | **Unlikely** | QAT trains the model to tolerate a *specific* quantization pattern (TorchAO int8-int4). Re-quantizing with Cactus's different scheme would lose the matched QAT benefit |
+| Unsloth pipeline outputs Cactus format | **No** | Outputs `.pte` only |
+
+**Verdict**: QAT-trained models are not *physically incompatible* with Cactus (weights can be saved pre-quantization and re-converted), but the **QAT accuracy recovery advantage is likely lost** when re-quantizing to `.cact` format, since the model was trained to tolerate TorchAO's int8-int4 pattern, not Cactus's proprietary quantization.
+
+### Options for Our Project (REVISED)
+
+**Option A: Stay with Cactus (.cact)**
 - Keep C02 as designed
-- Use separate GGUF quantization (PTQ with Q4_K_M or similar)
-- Lose QAT accuracy recovery advantage
-- Cactus may have Metal acceleration support out of the box
+- Use Cactus's own quantization pipeline (not Unsloth QAT)
+- Gain: NPU acceleration, dramatically lower RAM, built-in hybrid routing, zero-copy mapping
+- Lose: QAT accuracy recovery, integrated Unsloth training pipeline, open model format
+- Risk: Qwen3 model support availability; proprietary format lock-in
+- Simplifies C03: may wrap/extend Cactus routing instead of building from scratch
 
 **Option B: Switch to ExecuTorch (.pte)**
 - Replace Cactus with ExecuTorch runtime in C02
-- Use Unsloth QAT pipeline directly
+- Use Unsloth QAT pipeline directly for ~70% accuracy recovery
 - Get integrated training-to-deployment pipeline
 - XNNPACK CPU baseline, with Metal/CoreML as optimization path
-- Stronger Meta/PyTorch ecosystem backing
+- Stronger open-source ecosystem backing
+- Higher RAM footprint; C03 routing built entirely custom
 
 **Option C: Dual-Runtime Support (Adapter Pattern)**
 - Keep C02's `OnDeviceInferencePort` interface
 - Implement both `CactusInferenceAdapter` and `ExecuTorchInferenceAdapter`
-- Model optimization loop (FR-07) evaluates both runtimes
-- Higher implementation cost, maximum flexibility
+- Model optimization loop (FR-07) evaluates both runtimes with their respective quantization
+- C03 abstracts over Cactus's built-in routing vs custom ExecuTorch routing
+- Highest implementation cost, maximum flexibility
 
-**Recommendation**: Option B or C depending on Cactus's actual Qwen3 support maturity. The QAT accuracy advantage and integrated pipeline from Unsloth are significant. Our adapter-pattern architecture (NFR-04) already supports this switch cleanly.
+**Recommendation (REVISED)**: The choice depends on two unknowns:
+1. Does Cactus support Qwen3 models? (check model list)
+2. How does Cactus's proprietary quantization compare to QAT for accuracy on our domain?
+
+If Cactus supports Qwen3: Option A is compelling due to NPU acceleration, low RAM, and built-in hybrid routing (reducing C03 scope). If not: Option B with ExecuTorch. Option C is MVP-unfriendly but remains the safest long-term bet.
 
 ---
 
@@ -200,13 +258,13 @@ The current architecture has no explicit component for managing the QAT training
 
 **Suggestion**: Add a build-time component or CI pipeline stage for:
 - Dataset preparation (mixing, formatting)
-- QAT training execution
-- Model export (GGUF or .pte)
+- QAT training execution (if ExecuTorch path) or Cactus-format conversion (if Cactus path)
+- Model export (`.cact` or `.pte` depending on runtime choice)
 - Benchmark evaluation
 - Artifact publishing
 
 ### NC-02 Model Version / Pack Manager
-The two-file deployment pattern (model + tokenizer) needs a versioning and distribution strategy for OTA model updates.
+The deployment artifact pattern (model + tokenizer for ExecuTorch; single `.cact` for Cactus) needs a versioning and distribution strategy for OTA model updates.
 
 ### NC-03 Context Window Budget Allocator
 Given the 1024-token constraint, a component should manage token budget allocation across:
@@ -218,6 +276,14 @@ Given the 1024-token constraint, a component should manage token budget allocati
 
 This maps partially to C05 (Memory & Context Store) but is a distinct concern.
 
+### NC-04 C03 Routing Policy Engine vs Cactus Built-In Routing (NEW)
+Cactus v1 includes confidence-based hybrid routing that overlaps with our C03 Routing Policy Engine. Design must decide:
+- **Wrap**: C03 delegates to Cactus routing, adding policy DSL evaluation on top
+- **Replace**: C03 ignores Cactus routing and manages all decisions independently
+- **Hybrid**: Use Cactus routing for simple confidence thresholds, C03 for domain-specific policies (context rot, data sufficiency, fine-tuning triggers)
+
+This is a blocking design decision before Construction phase begins.
+
 ---
 
 ## 6. Key Numbers for Planning
@@ -225,13 +291,27 @@ This maps partially to C05 (Memory & Context Store) but is a distinct concern.
 | Metric | Value | Source |
 |---|---|---|
 | Qwen3-0.6B .pte size | ~472 MB | Colab notebook output |
-| Activation memory | ~244 MB | Export log (`Required memory for activation`) |
-| Total RAM footprint (0.6B) | ~716 MB minimum | Model + activation |
-| Inference speed (0.6B) | ~40 tok/s | Unsloth docs (iPhone 15 Pro) |
-| Max context length | 1024 tokens | Export parameter |
-| Max generation length | 128 tokens | Export parameter |
+| Activation memory (ExecuTorch) | ~244 MB | Export log (`Required memory for activation`) |
+| Total RAM footprint — ExecuTorch (0.6B) | ~716 MB minimum | Model + activation |
+| Total RAM footprint — Cactus (INT8) | ~108 MB (iPhone 17 Pro) | Cactus v1.7 docs |
+| Inference speed — ExecuTorch (0.6B) | ~40 tok/s gen | Unsloth docs (iPhone 15 Pro) |
+| Inference speed — Cactus (INT8, iPhone 17 Pro) | 300/33 tps (prompt/gen) | Cactus v1.7 docs |
+| Max context length | 1024 tokens | Export parameter (ExecuTorch) |
+| Max generation length | 128 tokens | Export parameter (ExecuTorch) |
 | Training VRAM (0.6B, T4) | ~10.5 GB peak | Colab notebook output |
 | Training time (100 steps, T4) | ~11.6 minutes | Colab notebook output |
 | Vocab size | 151,936 | Export log |
 | Hidden dim | 1024 | Export log |
 | Transformer layers | 28 | Export log |
+
+---
+
+## 7. Open Questions Requiring Resolution
+
+| # | Question | Blocking? | Needed For |
+|---|---|---|---|
+| OQ-1 | Does Cactus v1 support Qwen3 models? | Yes | Runtime selection (Option A vs B vs C) |
+| OQ-2 | What is Cactus's `.cact` conversion path from HuggingFace checkpoints? | Yes | Training pipeline design |
+| OQ-3 | How does Cactus's proprietary quantization compare to TorchAO QAT for domain-specific accuracy? | No (can evaluate post-MVP) | FR-07 optimization loop |
+| OQ-4 | Should C03 wrap, replace, or extend Cactus's built-in hybrid routing? | Yes | C03 design finalization |
+| OQ-5 | What is the Cactus `.cact` context window limit vs ExecuTorch's 1024? | Yes | C06, UC-14, UC-16 constraints |

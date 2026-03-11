@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "qwen3-phone-deployment"
+version = "0.1.0"
+description = "Qwen3-0.6B QAT training pipeline for phone deployment via Unsloth + ExecuTorch"
+readme = "training/README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+unsloth = "*"
+transformers = "4.57.3"
+trl = "0.25.1"
+torchao = "0.14.0"
+optimum = "1.24.0"
+executorch = "*"
+pytorch-tokenizers = "*"
+datasets = "4.3.0"
+huggingface_hub = ">=0.34.0"
+hf_transfer = "*"
+sentencepiece = "*"
+protobuf = "*"
+pandas = "*"
+
+[tool.poetry.group.dev.dependencies]
+marimo = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

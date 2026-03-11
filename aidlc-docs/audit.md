@@ -225,3 +225,31 @@ On the device use cactus inference engine. In terms of LLM we start with Qwen3."
 **Context**: User-directed research during Application Design pending-approval phase. Not a stage gate action — informational research to feed into subsequent design decisions.
 
 ---
+
+## Research Verification - Cactus v1 Compatibility
+**Timestamp**: 2026-03-11T17:15:47Z
+**User Input**: "Verify statement: if training LLM with QAT then cannot be used with cactus"
+**AI Response**: Fetched Cactus v1.7 docs (cactuscompute.com/docs). Key findings: (1) Cactus v1 is NOT llama.cpp/GGUF — uses proprietary `.cact` format with own engine+graph+kernels, (2) Cactus has built-in confidence-based hybrid routing overlapping C03, (3) QAT models are not physically incompatible but accuracy recovery benefit is likely lost when re-quantizing to `.cact`, (4) Cactus has NPU acceleration and dramatically lower RAM (~108 MB vs ~716 MB). Verdict: statement is technically false but practically relevant — QAT accuracy advantage does not transfer to Cactus's quantization.
+**Context**: Verification pass on research document assumptions.
+
+---
+
+## Research Update - Corrections Applied
+**Timestamp**: 2026-03-11T17:15:47Z
+**User Input**: "update research"
+**AI Response**: Updated `unsloth-executorch-research.md` with: corrected Cactus from GGUF to proprietary `.cact` format, added Cactus v1 architecture (Engine/Graph/Kernels), added Cactus performance benchmarks, revised comparison matrix with 14 dimensions, added QAT compatibility analysis table, added NC-04 (C03 vs Cactus routing overlap), added Section 7 with 5 open questions (OQ-1 to OQ-5), updated key numbers with Cactus RAM figures.
+**Context**: Research document correction pass based on verification findings.
+
+---
+
+## Code Extraction - Colab Notebook to Repo
+**Timestamp**: 2026-03-11T18:30:00Z
+**User Input**: "Extract all code and places it in this repo in a notebook independent form so that it could be executed with marimo or in plain Python."
+**AI Response**: Fetched raw notebook JSON from GitHub to capture all code cells including complete SFTConfig parameters. Created 4 files in `training/` directory:
+1. `training/requirements.txt` — All Python dependencies (unsloth, torchao==0.14.0, executorch, pytorch-tokenizers, datasets, trl, pandas, etc.)
+2. `training/qwen3_phone_deployment.py` — Complete training pipeline with `# %%` cell markers (marimo/VS Code compatible), 7 sections: env setup, model loading with QAT, data prep (75/25 reasoning/chat mix), SFTTrainer training (100 steps), memory stats, TorchAO save, ExecuTorch export via subprocess
+3. `training/export_executorch.sh` — Standalone shell script for the 3-step ExecuTorch export (convert weights → download config → export .pte)
+4. `training/README.md` — Documentation covering overview, QAT scheme, files, quick start, hardware requirements, output, pipeline stages, and key parameters
+**Context**: Code extraction from Unsloth Qwen3 Phone Deployment Colab notebook into notebook-independent executable Python files.
+
+---
