@@ -38,7 +38,7 @@ Build a domain-specific shopping planning assistant that supports hybrid inferen
 - Fallback conditions must be explicit and observable (e.g., capability limits, quality thresholds, runtime constraints).
 
 ### FR-06 Server Inference Backend
-- Primary v1 server backend must be `llm-d`.
+- Primary v1 server backend must be llm-d`.
 - `chutes.ai` may be considered in future iterations but is not the v1 baseline target.
 
 ### FR-07 Model Optimization and Selection Process
@@ -89,7 +89,7 @@ Build a domain-specific shopping planning assistant that supports hybrid inferen
 
 ### UC-02 Budget-Aware Basket Optimization
 - User provides a budget ceiling and preference constraints.
-- System computes an initial plan on-device, then falls back to server `llm-d` when optimization complexity exceeds device confidence/capability.
+- System computes an initial plan on-device, then falls back to server when optimization complexity exceeds device confidence/capability.
 
 ### UC-03 Dietary and Preference-Constrained Planning
 - User requests plans filtered by dietary rules (e.g., vegan, low-sodium, allergen exclusions).
@@ -105,7 +105,7 @@ Build a domain-specific shopping planning assistant that supports hybrid inferen
 
 ### UC-06 Multi-Turn Plan Refinement
 - User iteratively refines a shopping plan through follow-up prompts (replace items, adjust quantities, reprioritize).
-- Architecture supports seamless transition between on-device and server inference while maintaining a consistent conversation experience.
+- Architecture supports seamless transition between on-device and server inference while maintaining a consistent multi-turn conversation experience.
 
 ### UC-07 Explainability and Rationale Summaries
 - User asks why specific products/quantities were recommended.

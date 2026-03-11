@@ -60,11 +60,16 @@ class EvalConfig:
     # Eval dataset sizes (held-out samples)
     n_math_eval: int = 100
     n_chat_eval: int = 50
+    n_multiturn_eval: int = 20
     n_export_eval: int = 20
 
     # Metric thresholds
     math_correctness_threshold: float = 0.7
     reasoning_quality_threshold: float = 0.6
+    cot_format_threshold: float = 0.7
+    final_answer_threshold: float = 0.7
+    instruction_following_threshold: float = 0.7
+    response_completeness_threshold: float = 0.6
     relevancy_threshold: float = 0.7
     toxicity_threshold: float = 0.5
     bias_threshold: float = 0.5
@@ -140,6 +145,94 @@ def build_metrics(cfg: EvalConfig) -> dict:
     toxicity = ToxicityMetric(threshold=cfg.toxicity_threshold)
     bias = BiasMetric(threshold=cfg.bias_threshold)
 
+    # --- Dataset-specific metrics for OpenMathReasoning-mini ---
+
+    cot_format_compliance = GEval(
+        name="COT Format Compliance",
+        criteria=(
+            "Evaluate whether the model output follows a proper chain-of-thought "
+            "reasoning format as found in the OpenMathReasoning dataset. "
+            "The output should: (1) break the solution into discrete numbered "
+            "or clearly separated steps, (2) show intermediate calculations "
+            "rather than jumping to an answer, (3) use mathematical notation "
+            "appropriately, and (4) clearly state the final answer at the end, "
+            "ideally with a summary statement like 'The answer is ...' or "
+            "boxed notation. Deduct points for stream-of-consciousness text "
+            "without structure, missing intermediate steps, or no clear final "
+            "answer demarcation."
+        ),
+        evaluation_params=[
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.EXPECTED_OUTPUT,
+        ],
+        threshold=cfg.cot_format_threshold,
+    )
+
+    final_answer_extraction = GEval(
+        name="Final Answer Extraction",
+        criteria=(
+            "Determine whether the model output contains a clearly extractable "
+            "final answer to the math problem. The final answer should appear "
+            "at or near the end of the response and be unambiguous — for example "
+            "boxed (\\boxed{...}), preceded by 'The answer is', 'Therefore', "
+            "'Thus', or 'Final answer:', or otherwise clearly separated from "
+            "working steps. Award full score if the final answer is trivially "
+            "extractable by a simple parser; partial score if interspersed "
+            "with other text but still identifiable; zero if the response "
+            "trails off without stating a conclusion."
+        ),
+        evaluation_params=[
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+        ],
+        threshold=cfg.final_answer_threshold,
+    )
+
+    # --- Dataset-specific metrics for FineTome-100k ---
+
+    instruction_following = GEval(
+        name="Instruction Following",
+        criteria=(
+            "Evaluate how faithfully the model follows the user's instruction. "
+            "Consider: (1) does the response address ALL parts of the "
+            "instruction, including sub-questions or constraints? (2) does it "
+            "respect format requests (e.g. 'list', 'explain', 'compare')? "
+            "(3) does it stay within the scope of the instruction without "
+            "going off-topic? (4) does it follow any explicit constraints "
+            "(length, style, perspective)? Full score for complete compliance; "
+            "partial for addressing most but not all parts; zero for ignoring "
+            "the instruction entirely or producing an unrelated response."
+        ),
+        evaluation_params=[
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.EXPECTED_OUTPUT,
+        ],
+        threshold=cfg.instruction_following_threshold,
+    )
+
+    response_completeness = GEval(
+        name="Response Completeness",
+        criteria=(
+            "Assess whether the model's response is complete and not truncated. "
+            "A complete response: (1) answers the question fully without "
+            "trailing off mid-sentence, (2) covers all major points that a "
+            "knowledgeable assistant would include, (3) does not end abruptly "
+            "or with incomplete code/lists/explanations, and (4) provides "
+            "sufficient depth for the complexity of the question. Compare "
+            "the completeness against the expected output as a reference for "
+            "the appropriate level of detail. Deduct heavily for truncated "
+            "or obviously incomplete responses."
+        ),
+        evaluation_params=[
+            LLMTestCaseParams.INPUT,
+            LLMTestCaseParams.ACTUAL_OUTPUT,
+            LLMTestCaseParams.EXPECTED_OUTPUT,
+        ],
+        threshold=cfg.response_completeness_threshold,
+    )
+
     export_parity = GEval(
         name="Export Parity",
         criteria=(
@@ -159,6 +252,10 @@ def build_metrics(cfg: EvalConfig) -> dict:
     return {
         "math_correctness": math_correctness,
         "reasoning_quality": reasoning_quality,
+        "cot_format_compliance": cot_format_compliance,
+        "final_answer_extraction": final_answer_extraction,
+        "instruction_following": instruction_following,
+        "response_completeness": response_completeness,
         "relevancy": relevancy,
         "toxicity": toxicity,
         "bias": bias,
@@ -277,6 +374,187 @@ def prepare_chat_eval_data(cfg: EvalConfig, tokenizer) -> list[dict]:
     samples = samples[: cfg.n_chat_eval]  # Limit to requested count
     print(f"  Prepared {len(samples)} chat eval samples")
     return samples
+
+
+def prepare_multiturn_eval_data(cfg: EvalConfig, tokenizer) -> list[dict]:
+    """Load held-out multi-turn conversations from FineTome-100k.
+
+    Unlike prepare_chat_eval_data which extracts only the first turn,
+    this preserves the full conversation for multi-turn coherence testing.
+    The model is given all turns up to the last assistant turn, and must
+    generate the final assistant response.
+    """
+    print(f"Loading multi-turn eval data ({cfg.n_multiturn_eval} samples)...")
+    ds = load_dataset(cfg.chat_dataset_name, split=cfg.chat_split)
+    ds = standardize_sharegpt(ds)
+
+    total = len(ds)
+    # Use a different offset from single-turn to avoid overlap
+    start_idx = max(0, total - cfg.n_chat_eval - cfg.n_multiturn_eval)
+    end_idx = max(0, total - cfg.n_chat_eval)
+    eval_ds = ds.select(range(start_idx, end_idx))
+
+    samples = []
+    for row in eval_ds:
+        conversations = row["conversations"]
+        # Only use conversations with 4+ turns (at least 2 user + 2 assistant)
+        user_turns = [t for t in conversations if t["role"] == "user"]
+        asst_turns = [t for t in conversations if t["role"] == "assistant"]
+        if len(user_turns) >= 2 and len(asst_turns) >= 2:
+            # Build context: all turns except the last assistant turn
+            # The model must generate the final assistant response
+            last_asst_idx = None
+            for i in range(len(conversations) - 1, -1, -1):
+                if conversations[i]["role"] == "assistant":
+                    last_asst_idx = i
+                    break
+            if last_asst_idx is None:
+                continue
+
+            context_turns = conversations[:last_asst_idx]
+            expected_response = conversations[last_asst_idx]["content"]
+
+            # Format the context as a multi-turn prompt
+            context_text = tokenizer.apply_chat_template(
+                context_turns, tokenize=False, add_generation_prompt=True
+            )
+            samples.append(
+                {
+                    "input": context_text,
+                    "expected_output": expected_response,
+                    "n_turns": len(context_turns),
+                    "raw_input": context_turns[-1]["content"] if context_turns else "",
+                }
+            )
+
+    samples = samples[: cfg.n_multiturn_eval]
+    print(f"  Prepared {len(samples)} multi-turn eval samples")
+    return samples
+
+
+# %% [markdown]
+# ## 4b. Programmatic Dataset-Specific Checks
+
+# %%
+import re as _re
+
+
+def check_think_token_usage(actual_output: str) -> dict:
+    """Check whether the model uses <think> tokens properly.
+
+    Qwen3 uses <think>...</think> for internal reasoning. This checks:
+    - Whether think tokens appear at all
+    - Whether they are properly opened and closed
+    - Whether content exists outside think tokens (the actual answer)
+    """
+    has_open = "<think>" in actual_output
+    has_close = "</think>" in actual_output
+    open_count = actual_output.count("<think>")
+    close_count = actual_output.count("</think>")
+    balanced = open_count == close_count
+
+    # Extract content outside think blocks
+    outside_think = _re.sub(r"<think>.*?</think>", "", actual_output, flags=_re.DOTALL)
+    has_answer_outside = len(outside_think.strip()) > 0
+
+    return {
+        "has_think_tokens": has_open and has_close,
+        "balanced": balanced,
+        "open_count": open_count,
+        "close_count": close_count,
+        "has_answer_outside_think": has_answer_outside,
+        "answer_text": outside_think.strip(),
+    }
+
+
+def check_final_answer_extractable(actual_output: str) -> dict:
+    """Programmatically check if a final answer can be extracted.
+
+    Looks for common patterns: \\boxed{...}, 'The answer is', 'Therefore',
+    'Thus', 'Final answer:', or a number/expression at the end.
+    """
+    # Strip think tokens first
+    clean = _re.sub(r"<think>.*?</think>", "", actual_output, flags=_re.DOTALL).strip()
+
+    patterns = {
+        "boxed": bool(_re.search(r"\\boxed\{[^}]+\}", clean)),
+        "the_answer_is": bool(
+            _re.search(r"[Tt]he\s+(final\s+)?answer\s+is", clean)
+        ),
+        "therefore": bool(_re.search(r"\b[Tt]herefore\b", clean)),
+        "thus": bool(_re.search(r"\b[Tt]hus\b", clean)),
+        "final_answer_label": bool(
+            _re.search(r"[Ff]inal\s+[Aa]nswer\s*:", clean)
+        ),
+        "trailing_number": bool(
+            _re.search(r"(?:=\s*|is\s+)(-?\d+[\d.,/]*)\s*\.?\s*$", clean)
+        ),
+    }
+
+    extractable = any(patterns.values())
+    matched_patterns = [k for k, v in patterns.items() if v]
+
+    # Try to extract the actual answer value
+    extracted_answer = None
+    if patterns["boxed"]:
+        m = _re.search(r"\\boxed\{([^}]+)\}", clean)
+        if m:
+            extracted_answer = m.group(1)
+    elif patterns["the_answer_is"]:
+        m = _re.search(
+            r"[Tt]he\s+(?:final\s+)?answer\s+is\s+(.+?)[\.\n]", clean
+        )
+        if m:
+            extracted_answer = m.group(1).strip()
+
+    return {
+        "extractable": extractable,
+        "matched_patterns": matched_patterns,
+        "extracted_answer": extracted_answer,
+        "clean_output": clean,
+    }
+
+
+def check_expected_answer_match(
+    actual_output: str, expected_answer: str
+) -> dict:
+    """Check if the model's extracted answer matches the expected answer.
+
+    Uses normalization to handle formatting differences (whitespace,
+    commas in numbers, trailing periods, etc.).
+    """
+    if not expected_answer:
+        return {"matchable": False, "reason": "no expected_answer available"}
+
+    extraction = check_final_answer_extractable(actual_output)
+    if not extraction["extracted_answer"]:
+        return {
+            "matchable": True,
+            "match": False,
+            "reason": "could not extract answer from output",
+            "expected": expected_answer,
+        }
+
+    def normalize(s: str) -> str:
+        s = s.strip().lower()
+        s = s.replace(",", "")  # Remove thousands separators
+        s = s.rstrip(".")  # Remove trailing periods
+        s = _re.sub(r"\s+", " ", s)  # Normalize whitespace
+        # Remove $ signs and other common math wrappers
+        s = s.strip("$").strip()
+        return s
+
+    norm_actual = normalize(extraction["extracted_answer"])
+    norm_expected = normalize(expected_answer)
+
+    return {
+        "matchable": True,
+        "match": norm_actual == norm_expected,
+        "actual_extracted": extraction["extracted_answer"],
+        "expected": expected_answer,
+        "norm_actual": norm_actual,
+        "norm_expected": norm_expected,
+    }
 
 
 # %% [markdown]
