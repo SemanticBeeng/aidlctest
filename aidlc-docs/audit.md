@@ -218,10 +218,10 @@ On the device use cactus inference engine. In terms of LLM we start with Qwen3."
 
 ---
 
-## Application Design - External Research Integration
-**Timestamp**: 2026-03-11T17:00:34Z
-**User Input**: "Study https://unsloth.ai/docs/basics/inference-and-deployment/deploy-llms-phone and referenced code https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Qwen3_(0_6B)-Phone_Deployment.ipynb and extract components and designdecisions to reuse"
-**AI Response**: "Extracted reusable components and design decisions into unsloth-phone-reuse-extraction.md and linked it from application-design.md for downstream stages."
-**Context**: Application Design refinements requested before approval.
+## Research Request - Unsloth + ExecuTorch Phone Deployment
+**Timestamp**: 2026-03-11T17:15:47Z
+**User Input**: "Study https://unsloth.ai/docs/basics/inference-and-deployment/deploy-llms-phone and referenced code https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Qwen3_(0_6B)-Phone_Deployment.ipynb and extract components and design decisions to reuse."
+**AI Response**: Fetched both URLs, analyzed pipeline components (QAT training, data prep, ExecuTorch export, iOS deployment), extracted 8 design decisions (D1-D8), identified architectural tension between Cactus (GGUF) and ExecuTorch (.pte), mapped 10 reusable components to existing architecture, surfaced 3 new component concerns (NC-01 to NC-03), and documented key planning numbers. Research saved to `aidlc-docs/inception/application-design/unsloth-executorch-research.md`.
+**Context**: User-directed research during Application Design pending-approval phase. Not a stage gate action — informational research to feed into subsequent design decisions.
 
 ---
