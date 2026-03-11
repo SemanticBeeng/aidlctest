@@ -14,4 +14,4 @@ C) Implement an abstraction with both providers, but ship with `llm-d` as defaul
 D) Implement an abstraction with both providers, but ship with `chutes.ai` as default
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: A
+[Answer]: X Implement an abstraction over llm-d also considering edgeless systems private mode ai, chutes.ai, tinfoil.ai, trymaple.ai but ship with llm-d`as default.
