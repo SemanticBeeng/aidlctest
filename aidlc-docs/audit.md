@@ -253,3 +253,24 @@ On the device use cactus inference engine. In terms of LLM we start with Qwen3."
 **Context**: Code extraction from Unsloth Qwen3 Phone Deployment Colab notebook into notebook-independent executable Python files.
 
 ---
+
+## DeepEval Evaluation Pipeline - Code Implementation
+**Timestamp**: 2026-03-11T20:00:00Z
+**User Input**: "Save code for this entire procedure so I can reproduce and check its correctness."
+**AI Response**: Created 4 files implementing the full DeepEval evaluation pipeline:
+1. `training/evaluate_model.py` (~563 lines) — Standalone evaluation orchestrator with EvalConfig dataclass, 6 DeepEval metrics (GEval math_correctness, GEval reasoning_quality, AnswerRelevancyMetric, ToxicityMetric, BiasMetric, GEval export_parity), model loading, held-out dataset preparation, test case generation, 4 evaluation suites (math, chat, regression, export parity), results reporting to JSON
+2. `tests/conftest.py` (~120 lines) — Session-scoped pytest fixtures for model/data/test-case sharing
+3. `tests/test_model_quality.py` (~80 lines) — 5 parametrized test classes (70 test cases total) using deepeval.assert_test()
+4. `tests/__init__.py` — Empty package marker
+Also added `deepeval = "*"` and `pytest = ">=7.0"` to dev dependencies in pyproject.toml.
+**Context**: Implementation of evaluation code following the DeepEval design discussion.
+
+---
+
+## Evaluation Documentation
+**Timestamp**: 2026-03-11T20:30:00Z
+**User Input**: "Capture all instructions how to run evaluations code and human explanations"
+**AI Response**: Created `training/EVALUATIONS.md` — comprehensive evaluation guide covering: overview and LLM-as-judge rationale, architecture diagram, prerequisites (trained model, OpenAI API key, dependencies, hardware, Confident AI), file inventory, all 5 evaluation suites explained with GEval criteria text, metrics deep dive (GEval, built-in metrics, LLMTestCase), data pipeline and held-out strategy, 4 execution methods (standalone script, marimo, pytest, Python API), full configuration reference for EvalConfig and pytest fixtures, results interpretation with benchmark tables, Confident AI dashboard setup, and troubleshooting guide with expected timelines.
+**Context**: Documentation capture of all evaluation instructions and human-readable explanations.
+
+---

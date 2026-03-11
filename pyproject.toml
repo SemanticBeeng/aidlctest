@@ -23,6 +23,8 @@ pandas = "*"
 
 [tool.poetry.group.dev.dependencies]
 marimo = "*"
+deepeval = "*"
+pytest = ">=7.0"
 
 [build-system]
 requires = ["poetry-core"]
