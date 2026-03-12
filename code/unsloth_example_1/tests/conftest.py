@@ -29,8 +29,15 @@ from training.evaluate_model import (
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session")
 def eval_config():
-    """Session-wide evaluation config with reduced sizes for test speed."""
+    """Session-wide evaluation config with reduced sizes for test speed.
+
+    Respects QAT_MODEL_DIR env var to override the model path,
+    allowing evaluation of the base model without training.
+    """
+    import os
+
     return EvalConfig(
+        qat_model_dir=os.environ.get("QAT_MODEL_DIR", "phone_model"),
         n_math_eval=20,
         n_chat_eval=10,
         n_multiturn_eval=10,
