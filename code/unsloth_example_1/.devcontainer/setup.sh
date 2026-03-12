@@ -8,7 +8,7 @@ echo "  Dev Container Setup — RunPod Eval Runner"
 echo "============================================"
 
 # ── 1. Ensure volume mount points are writable ──
-for dir in /env /data /data/eval_results /data/huggingface; do
+for dir in /buildcache /data /data/eval_results /data/huggingface; do
     if [ -d "$dir" ]; then
         sudo chown -R "$(id -u):$(id -g)" "$dir" 2>/dev/null || true
     else
@@ -17,22 +17,26 @@ for dir in /env /data /data/eval_results /data/huggingface; do
     fi
 done
 
-# ── 2. Install Python dependencies (cached on /env volume) ──
-VENV_MARKER="/env/.poetry-installed"
+# Create buildcache subdirectories
+mkdir -p /buildcache/virtualenvs /buildcache/pip-cache /buildcache/pycache \
+         /buildcache/pytest /buildcache/ruff /buildcache/mypy
+
+# ── 2. Install Python dependencies (cached on /buildcache volume) ──
+VENV_MARKER="/buildcache/.poetry-installed"
 
 cd /workspace
 
 if [ ! -f "$VENV_MARKER" ]; then
     echo ""
-    echo "▸ First run: installing Poetry dependencies to /env/virtualenvs ..."
-    poetry config virtualenvs.path /env/virtualenvs
+    echo "▸ First run: installing Poetry dependencies to /buildcache/virtualenvs ..."
+    poetry config virtualenvs.path /buildcache/virtualenvs
     poetry install --no-interaction
     touch "$VENV_MARKER"
     echo "  ✓ Dependencies installed."
 else
     echo ""
     echo "▸ Syncing dependencies (venv exists on volume) ..."
-    poetry config virtualenvs.path /env/virtualenvs
+    poetry config virtualenvs.path /buildcache/virtualenvs
     poetry install --no-interaction --no-root
     echo "  ✓ Dependencies synced."
 fi

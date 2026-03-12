@@ -1,0 +1,224 @@
+# Dev Container Design — Criteria and Solution
+
+Design rationale for the dev container environment used to run Qwen3-0.6B
+QAT evaluations on cloud GPU providers (RunPod).
+
+---
+
+## 1. Design Criteria
+
+### 1.1 Workspace Purity
+
+**Constraint**: No build byproducts may exist in the project workspace —
+not on the host filesystem, and not inside the container's `/workspace`
+bind mount.
+
+**Byproducts covered**:
+- Python virtual environment (Poetry-managed `.venv`)
+- pip download cache
+- `__pycache__` bytecode files (all packages)
+- Tool caches: pytest, ruff, mypy
+
+**Rationale**: The project workspace is a git clone. Build artifacts are
+large (4+ GB for PyTorch alone), machine-specific, and must not appear in
+`git status` or be accidentally committed.
+
+### 1.2 Volume Portability
+
+**Constraint**: All persistent state must live on Docker volumes (not host
+bind mounts) so it can be transferred to cloud GPU providers.
+
+**Rationale**: RunPod network volumes can be pre-populated and attached to
+disposable pods. A host bind mount like `~/appdata/tmp/builds/...` only
+works on a specific local machine and cannot be synced to a cloud pod.
+Named Docker volumes can be exported, transferred, or recreated from the
+same setup script.
+
+### 1.3 Pod Disposability
+
+**Constraint**: Pods are ephemeral. Destroying and recreating a pod must
+not lose installed dependencies, downloaded datasets, or evaluation
+results.
+
+**Rationale**: GPU pods cost $0.20–$1.00+/hr. Users stop/destroy pods
+between eval runs. All state that survives pod lifecycle must be on
+persistent volumes.
+
+### 1.4 Idempotent Setup
+
+**Constraint**: The post-create script (`setup.sh`) must be safe to re-run
+on every container start without redundant work.
+
+**Rationale**: Dev containers run `postCreateCommand` on first build. But
+pods restart, volumes get reattached, and users re-open containers. The
+script must detect existing state (marker files, cached directories) and
+skip completed steps.
+
+### 1.5 Single Configuration for Local and Cloud
+
+**Constraint**: The same `devcontainer.json` must work for both local
+Docker (development/debugging) and RunPod (GPU evaluation).
+
+**Rationale**: Developers test container configuration locally before
+deploying to RunPod. The only difference should be the volume backing
+(local Docker volume vs. RunPod network volume) — not the container
+config itself.
+
+### 1.6 Non-Root Execution
+
+**Constraint**: The container must run as a non-root user (`vscode`,
+UID 1000) for VS Code Dev Containers compatibility.
+
+**Rationale**: RunPod images default to root. VS Code Dev Containers
+expect a non-root `remoteUser`. The Dockerfile creates the user and
+grants passwordless sudo for operations that need elevated privileges
+(e.g., `chown` on volume mount points).
+
+---
+
+## 2. Solution Architecture
+
+### 2.1 Volume Layout
+
+Two named Docker volumes separate concerns:
+
+| Volume | Mount Point | Docker Name | RunPod Name | Size | Contents |
+|--------|-------------|-------------|-------------|------|----------|
+| Build cache | `/buildcache` | `eval-buildcache` | `eval-buildcache` | 20 GB | Poetry venv, pip cache, `__pycache__`, tool caches |
+| Data | `/data` | `eval-datasets` | `eval-datasets` | 50 GB | HuggingFace datasets, trained models, eval results |
+
+**Why two volumes instead of one**: Build cache is disposable (can be
+fully rebuilt from `poetry install` + `setup.sh`). Data is not — trained
+models and eval results represent hours of GPU time. Separating them
+allows deleting/recreating the build cache without risking data loss.
+
+### 2.2 Cache Redirection
+
+Every tool that writes cache files is redirected to `/buildcache/` via
+environment variables or tool configuration:
+
+| Tool | Mechanism | Target |
+|------|-----------|--------|
+| Poetry | `POETRY_VIRTUALENVS_PATH` env var | `/buildcache/virtualenvs` |
+| pip | `PIP_CACHE_DIR` env var | `/buildcache/pip-cache` |
+| Python bytecode | `PYTHONPYCACHEPREFIX` env var | `/buildcache/pycache` |
+| pytest | `[tool.pytest.ini_options] cache_dir` in pyproject.toml | `/buildcache/pytest` |
+| ruff | `[tool.ruff] cache-dir` in pyproject.toml | `/buildcache/ruff` |
+| mypy | `[tool.mypy] cache_dir` in pyproject.toml | `/buildcache/mypy` |
+| HuggingFace | `HF_HOME` env var | `/data/huggingface` |
+| Transformers | `TRANSFORMERS_CACHE` env var | `/data/huggingface/hub` |
+
+Environment variables are set in `devcontainer.json` → `containerEnv` so
+they apply to all shells and processes inside the container. Tool-specific
+config in `pyproject.toml` provides a fallback for contexts where env vars
+may not be loaded.
+
+### 2.3 Container Image
+
+```
+Base: runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+
+Layers added:
+  1. System packages: git, curl, openssh-server, sudo
+  2. Poetry: installed to /opt/poetry, on PATH
+  3. Non-root user: vscode (UID 1000), passwordless sudo
+  4. Mount point: /buildcache directory (owned by vscode)
+  5. SSH config: key-only auth for VS Code Remote
+```
+
+**Why RunPod's base image**: It bundles PyTorch + CUDA + cuDNN in a
+tested combination. Building from `nvidia/cuda` and installing PyTorch
+manually adds complexity and risks version mismatches.
+
+### 2.4 Setup Script (setup.sh)
+
+The post-create script runs in 6 ordered steps, each idempotent:
+
+1. **Volume permissions** — `chown` mount points to the `vscode` user
+   (RunPod network volumes may be owned by root initially)
+2. **Subdirectory creation** — create all `/buildcache/*` subdirectories
+3. **Poetry install** — installs dependencies to
+   `/buildcache/virtualenvs/`; uses marker file
+   `/buildcache/.poetry-installed` to skip on subsequent runs
+4. **Dataset download** — pre-caches OpenMathReasoning-mini and
+   FineTome-100k to `/data/huggingface/hub/`; checks for existing
+   cache directories before downloading
+5. **GPU verification** — prints GPU name and VRAM via `torch.cuda`
+6. **Environment check** — warns if `OPENAI_API_KEY` is not set, checks
+   for trained model at `/workspace/phone_model` or `/data/phone_model`
+
+### 2.5 VS Code Integration
+
+```jsonc
+// devcontainer.json settings
+{
+  "python.defaultInterpreterPath": "/buildcache/virtualenvs/qwen3-phone-deployment-py3.11/bin/python",
+  "extensions": ["ms-python.python", "ms-python.vscode-pylance", "charliermarsh.ruff", "ms-toolsai.jupyter"]
+}
+```
+
+The interpreter path points into the volume-backed venv so Pylance,
+test discovery, and terminal activation all use the correct environment
+without manual configuration.
+
+---
+
+## 3. Design Decisions and Trade-offs
+
+### Named volumes vs. bind mounts
+
+| | Named volumes (chosen) | Bind mounts (rejected) |
+|---|---|---|
+| Cloud sync | Can be backed by RunPod network volumes | Only works on local host |
+| Portability | Works on any Docker host | Requires specific host path |
+| Performance | Docker-managed, overlay-optimized | OS filesystem, may be slower on macOS |
+| Visibility | Opaque to host (`docker volume ls`) | Visible in host filesystem |
+| Cleanup | `docker volume rm` | `rm -rf` on host |
+
+**Decision**: Named volumes chosen because the primary deployment target
+(RunPod) uses network volumes that map directly to Docker named volumes.
+
+### Two volumes vs. one
+
+A single volume would simplify configuration but conflates disposable
+build artifacts with irreplaceable data. With two volumes, a corrupted
+venv can be fixed by deleting `eval-buildcache` and re-running `setup.sh`
+without touching datasets or eval results.
+
+### Poetry vs. pip + venv
+
+Poetry provides deterministic lockfile resolution, grouped dependencies
+(dev vs. production), and a single `poetry install` command. The
+`POETRY_VIRTUALENVS_PATH` env var cleanly redirects the venv location
+without patching Poetry internals.
+
+### `PYTHONPYCACHEPREFIX` vs. `PYTHONDONTWRITEBYTECODE`
+
+`PYTHONPYCACHEPREFIX` redirects bytecode to the build cache volume,
+preserving import performance. `PYTHONDONTWRITEBYTECODE=1` would
+prevent `.pyc` generation entirely, slowing every import. The redirect
+approach keeps performance while maintaining workspace purity.
+
+---
+
+## 4. File Inventory
+
+| File | Role | Key responsibility |
+|------|------|--------------------|
+| `.devcontainer/Dockerfile` | Image definition | Base image, Poetry, non-root user, SSH |
+| `.devcontainer/devcontainer.json` | Container config | Volumes, env vars, GPU passthrough, extensions |
+| `.devcontainer/setup.sh` | Post-create script | Idempotent dependency install, dataset caching, GPU check |
+| `pyproject.toml` | Project/tool config | Dependencies, cache dir overrides for pytest/ruff/mypy |
+| `tests/conftest.py` | Test fixtures | `QAT_MODEL_DIR` env var, session-scoped model loading |
+| `training/RUNPOD_EVAL_WORKFLOW.md` | Workflow guide | Step-by-step RunPod deployment and evaluation procedure |
+
+---
+
+## 5. Cost Summary
+
+| Resource | Cost |
+|----------|------|
+| `eval-buildcache` network volume (20 GB idle) | ~$1.40/month |
+| `eval-datasets` network volume (50 GB idle) | ~$3.50/month |
+| T4 GPU pod (per eval run, ~15 min) | ~$0.05–$0.10 |
+| OpenAI API (LLM-as-judge metrics, ~210 tests) | ~$2–$5 per run |

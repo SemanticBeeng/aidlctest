@@ -13,10 +13,11 @@ Local Machine                          RunPod Pod (GPU)
 │  VS Code    │◄────────────────►│  Dev Container                      │
 │  + Remote   │                  │  ┌───────────────────────────────┐  │
 │    SSH ext  │                  │  │ /workspace   ← git clone      │  │
-│             │                  │  │ /env         ← Network Vol 1  │  │
+│             │                  │  │ /buildcache  ← Named Volume 1  │  │
 │             │                  │  │   virtualenvs/  (Poetry venv) │  │
 │             │                  │  │   pip-cache/                  │  │
-│             │                  │  │ /data        ← Network Vol 2  │  │
+│             │                  │  │   pycache/ pytest/ ruff/ mypy/│  │
+│             │                  │  │ /data        ← Named Volume 2  │  │
 │             │                  │  │   huggingface/  (datasets)    │  │
 │             │                  │  │   eval_results/ (output JSON) │  │
 │             │                  │  │   phone_model/  (trained QAT) │  │
@@ -25,9 +26,11 @@ Local Machine                          RunPod Pod (GPU)
 └─────────────┘                  └─────────────────────────────────────┘
 ```
 
-**Key principle**: The pod is disposable. Network volumes persist. You can
-destroy and recreate pods without losing your Python environment, datasets,
-or evaluation results.
+**Key principle**: The pod is disposable. Build byproducts (virtualenvs,
+caches) live in `/buildcache` — a named Docker volume (`eval-buildcache`).
+They never pollute the project workspace. Datasets and results persist on
+the `/data` network volume (`eval-datasets`). Both volumes can be synced to
+RunPod as network volumes.
 
 ---
 
@@ -58,18 +61,18 @@ or evaluation results.
 
 ---
 
-## Step 1: Create Network Volumes (one-time)
+## Step 1: Create Network Volume (one-time)
 
 In RunPod Dashboard → **Storage** → **Network Volumes**, create two volumes
 in the **same data center region** you'll launch pods in:
 
 | Volume Name | Size | Purpose |
 |-------------|------|---------|
-| `eval-python-env` | 20 GB | Poetry virtualenvs, pip cache |
+| `eval-buildcache` | 20 GB | Poetry virtualenv, pip cache, `__pycache__`, tool caches |
 | `eval-datasets` | 50 GB | HuggingFace datasets, trained models, eval results |
 
 > **Cost**: Network volumes cost ~$0.07/GB/month when idle.
-> 20 + 50 GB = ~$4.90/month if kept attached.
+> 70 GB total = ~$4.90/month if kept attached.
 
 ---
 
@@ -80,8 +83,8 @@ in the **same data center region** you'll launch pods in:
 1. **GPU**: Select **NVIDIA T4** (16 GB, cheapest — sufficient for 0.6B model)
    - Or **A10G** (24 GB) if running QAT regression tests (two models loaded)
 2. **Template**: Select **RunPod PyTorch 2.4.0**
-3. **Network Volumes**: Attach both volumes:
-   - `eval-python-env` → mount at `/env`
+3. **Network Volumes**: Attach:
+   - `eval-buildcache` → mount at `/buildcache`
    - `eval-datasets` → mount at `/data`
 4. **Expose ports**: `22` (SSH)
 5. **Environment Variables**:
@@ -96,18 +99,18 @@ pip install runpodctl
 # Authenticate
 runpodctl config --apiKey "YOUR_RUNPOD_API_KEY"
 
-# Launch pod with both network volumes
+# Launch pod with network volumes for build cache and datasets
 runpodctl create pod \
   --name "eval-runner" \
   --gpuType "NVIDIA GeForce RTX 4090" \
   --gpuCount 1 \
   --imageName "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04" \
-  --volumeId "vol_abc123" \
-  --volumeMountPath "/env" \
+  --volumeId "vol_buildcache" \
+  --volumeMountPath "/buildcache" \
+  --volumeId "vol_datasets" \
+  --volumeMountPath "/data" \
   --env "OPENAI_API_KEY=sk-..." \
   --ports "22/tcp"
-
-# Note: attach second volume via dashboard or API call
 ```
 
 ---
@@ -138,7 +141,7 @@ git clone https://github.com/SemanticBeeng/aidlctest.git .
    **"Reopen in Container"** — click it.
 
 6. The dev container builds, then runs [`setup.sh`](../.devcontainer/setup.sh):
-   - Installs Poetry dependencies to `/env/virtualenvs/`
+   - Installs Poetry dependencies to `/buildcache/virtualenvs/`
    - Downloads datasets to `/data/huggingface/`
    - Verifies GPU and env vars
 
@@ -219,7 +222,7 @@ runpodctl stop pod <pod-id>
 # Or in dashboard: Pod → Stop
 ```
 
-**Cost when stopped**: $0 for the pod, ~$4.90/month for the two network volumes.
+**Cost when stopped**: $0 for the pod, ~$4.90/month for both network volumes.
 
 ---
 
@@ -227,12 +230,19 @@ runpodctl stop pod <pod-id>
 
 After first run, the volumes contain:
 
-### `/env` — Python Environment (20 GB)
+### `/buildcache` — Build Byproducts (named volume: `eval-buildcache`)
+
+Named Docker volume, synced to RunPod as a network volume.
+Never stored in the project workspace.
 
 ```
-/env/
+/buildcache/
 ├── .poetry-installed        ← marker: skip reinstall on next boot
 ├── pip-cache/               ← pip download cache
+├── pycache/                 ← PYTHONPYCACHEPREFIX target
+├── pytest/                  ← pytest cache
+├── ruff/                    ← ruff lint cache
+├── mypy/                    ← mypy type-check cache
 └── virtualenvs/
     └── qwen3-phone-deployment-py3.11/
         ├── bin/python       ← interpreter used by VS Code
@@ -295,10 +305,10 @@ Volumes cannot be mounted cross-region.
 ### `poetry install` is slow
 
 First run downloads ~4 GB of packages. Subsequent runs use the cached
-venv on `/env` and complete in seconds. If the venv seems corrupted:
+venv on `/buildcache` and complete in seconds. If the venv seems corrupted:
 
 ```bash
-rm /env/.poetry-installed
+rm /buildcache/.poetry-installed
 bash .devcontainer/setup.sh
 ```
 
@@ -321,10 +331,10 @@ run without an API key.
 
 The interpreter path is set in [`devcontainer.json`](../.devcontainer/devcontainer.json):
 ```
-/env/virtualenvs/qwen3-phone-deployment-py3.11/bin/python
+/buildcache/virtualenvs/qwen3-phone-deployment-py3.11/bin/python
 ```
 If Poetry created the venv with a different name, check:
 ```bash
-ls /env/virtualenvs/
+ls /buildcache/virtualenvs/
 ```
 Then update the `python.defaultInterpreterPath` setting.

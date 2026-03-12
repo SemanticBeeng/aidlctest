@@ -27,6 +27,9 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
     && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/$USERNAME
 
+# Build cache directory — named volume, holds .venv, pip, __pycache__, etc.
+RUN mkdir -p /buildcache && chown $USER_UID:$USER_GID /buildcache
+
 # SSH config for VS Code Remote
 RUN mkdir -p /run/sshd \
     && sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \

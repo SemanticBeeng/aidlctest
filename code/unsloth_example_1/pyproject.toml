@@ -29,3 +29,13 @@ pytest = ">=7.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+# Build byproducts → /buildcache (never in the project workspace)
+[tool.pytest.ini_options]
+cache_dir = "/buildcache/pytest"
+
+[tool.ruff]
+cache-dir = "/buildcache/ruff"
+
+[tool.mypy]
+cache_dir = "/buildcache/mypy"
