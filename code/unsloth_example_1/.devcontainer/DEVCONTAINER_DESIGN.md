@@ -14,7 +14,7 @@ not on the host filesystem, and not inside the container's `/workspace`
 bind mount.
 
 **Byproducts covered**:
-- Python virtual environment (Poetry-managed `.venv`)
+- Python virtual environment (uv-managed venv)
 - pip download cache
 - `__pycache__` bytecode files (all packages)
 - Tool caches: pytest, ruff, mypy
@@ -84,13 +84,78 @@ Two named Docker volumes separate concerns:
 
 | Volume | Mount Point | Docker Name | RunPod Name | Size | Contents |
 |--------|-------------|-------------|-------------|------|----------|
-| Build cache | `/buildcache` | `eval-buildcache` | `eval-buildcache` | 20 GB | Poetry venv, pip cache, `__pycache__`, tool caches |
+| Build cache | `/buildcache` | `eval-buildcache` | `eval-buildcache` | 20 GB | uv venv, download cache, `__pycache__`, tool caches |
 | Data | `/data` | `eval-datasets` | `eval-datasets` | 50 GB | HuggingFace datasets, trained models, eval results |
 
 **Why two volumes instead of one**: Build cache is disposable (can be
-fully rebuilt from `poetry install` + `setup.sh`). Data is not — trained
+fully rebuilt from `uv sync` + `setup.sh`). Data is not — trained
 models and eval results represent hours of GPU time. Separating them
 allows deleting/recreating the build cache without risking data loss.
+
+#### Volume identity across environments
+
+The Docker name and RunPod name are intentionally the same
+(`eval-buildcache`, `eval-datasets`) but they are **different volumes**
+created and managed by different systems. They never coexist — only one
+is active depending on where the container runs.
+
+| Environment | Who creates the volume | Backing storage | Lifecycle |
+|---|---|---|---|
+| **Local Docker** | Docker Engine, on first `docker compose up` or dev container open | Docker-managed directory on host (e.g. `/var/lib/docker/volumes/eval-buildcache/`) | Survives container rebuilds; deleted by `docker volume rm eval-buildcache` |
+| **RunPod** | Operator, via RunPod Dashboard → Storage → Network Volumes | RunPod network-attached block storage in the selected data center | Persists across pod stop/start/destroy; deleted via Dashboard |
+
+**How to tell which is in use**: Inside the container, `/buildcache`
+always looks the same regardless of backing. To verify:
+
+```bash
+# On local Docker
+docker volume inspect eval-buildcache   # shows Mountpoint on host
+
+# On RunPod
+df -h /buildcache                       # shows network volume device
+```
+
+**The workflow**:
+
+1. **Local development** — `eval-buildcache` is a local Docker volume.
+   Opening the dev container creates it if missing. `setup.sh` populates
+   `venv/` and `pkg-cache/`. This volume cannot be transferred to RunPod.
+
+2. **RunPod deployment** — The operator creates a RunPod network volume
+   also named `eval-buildcache` (20 GB) in the target data center. On
+   first pod launch, it is empty. `setup.sh` runs `uv sync` which
+   populates `venv/` and `pkg-cache/` from scratch (~4 GB download).
+   Subsequent pod launches reuse the populated volume (marker file
+   `/buildcache/.uv-installed` skips reinstall).
+
+3. **No sync between them** — The local and RunPod volumes are
+   independent. Rebuilding locally does not affect RunPod, and vice
+   versa. Both install identical packages because `uv sync --locked`
+   reads the committed `uv.lock`, which pins every transitive
+   dependency with exact versions and hashes. The inputs are
+   `pyproject.toml` (direct deps) + `uv.lock` (resolved graph) +
+   `setup.sh` (orchestration). As long as the same git commit is
+   checked out, both environments are byte-for-byte identical.
+
+#### Lockfile workflow
+
+`uv.lock` is committed to the repo alongside `pyproject.toml`.
+
+| Action | Command | When |
+|---|---|---|
+| Generate or update lockfile | `uv lock` | After editing `pyproject.toml` |
+| Install from lockfile (no resolution) | `uv sync --locked` | In `setup.sh`, CI, fresh pods |
+| Add a dependency | `uv add <pkg>` | Updates both `pyproject.toml` and `uv.lock` |
+| Add a dev dependency | `uv add --group dev <pkg>` | Same, into `[dependency-groups] dev` |
+
+`--locked` makes `uv sync` fail fast if the lockfile is out of date
+relative to `pyproject.toml`, preventing silent version drift between
+environments.
+
+The matching names are a convention for readability — so that
+`devcontainer.json`, `RUNPOD_EVAL_WORKFLOW.md`, and Dashboard entries
+all reference the same logical name, even though the physical volumes
+are distinct.
 
 ### 2.2 Cache Redirection
 
@@ -99,8 +164,8 @@ environment variables or tool configuration:
 
 | Tool | Mechanism | Target |
 |------|-----------|--------|
-| Poetry | `POETRY_VIRTUALENVS_PATH` env var | `/buildcache/virtualenvs` |
-| pip | `PIP_CACHE_DIR` env var | `/buildcache/pip-cache` |
+| uv (venv) | `VENV_DIR` → mapped to `UV_PROJECT_ENVIRONMENT` in setup.sh | `/buildcache/venv` |
+| uv (cache) | `PKG_CACHE_DIR` → mapped to `UV_CACHE_DIR` in setup.sh | `/buildcache/pkg-cache` |
 | Python bytecode | `PYTHONPYCACHEPREFIX` env var | `/buildcache/pycache` |
 | pytest | `[tool.pytest.ini_options] cache_dir` in pyproject.toml | `/buildcache/pytest` |
 | ruff | `[tool.ruff] cache-dir` in pyproject.toml | `/buildcache/ruff` |
@@ -120,7 +185,7 @@ Base: runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 Layers added:
   1. System packages: git, curl, openssh-server, sudo
-  2. Poetry: installed to /opt/poetry, on PATH
+  2. uv: static binary copied from official image
   3. Non-root user: vscode (UID 1000), passwordless sudo
   4. Mount point: /buildcache directory (owned by vscode)
   5. SSH config: key-only auth for VS Code Remote
@@ -132,15 +197,17 @@ manually adds complexity and risks version mismatches.
 
 ### 2.4 Setup Script (setup.sh)
 
-The post-create script runs in 6 ordered steps, each idempotent:
+The post-create script runs in 7 ordered steps, each idempotent:
 
-1. **Volume permissions** — `chown` mount points to the `vscode` user
+1. **Env var mapping** — exports tool-specific vars from generic ones
+   (`VENV_DIR` → `UV_PROJECT_ENVIRONMENT`, `PKG_CACHE_DIR` → `UV_CACHE_DIR`)
+2. **Volume permissions** — `chown` mount points to the `vscode` user
    (RunPod network volumes may be owned by root initially)
-2. **Subdirectory creation** — create all `/buildcache/*` subdirectories
-3. **Poetry install** — installs dependencies to
-   `/buildcache/virtualenvs/`; uses marker file
-   `/buildcache/.poetry-installed` to skip on subsequent runs
-4. **Dataset download** — pre-caches OpenMathReasoning-mini and
+3. **Subdirectory creation** — create all `/buildcache/*` subdirectories
+4. **uv sync** — installs dependencies to
+   `/buildcache/venv/`; uses marker file
+   `/buildcache/.uv-installed` to skip on subsequent runs
+5. **Dataset download** — pre-caches OpenMathReasoning-mini and
    FineTome-100k to `/data/huggingface/hub/`; checks for existing
    cache directories before downloading
 5. **GPU verification** — prints GPU name and VRAM via `torch.cuda`
@@ -152,7 +219,7 @@ The post-create script runs in 6 ordered steps, each idempotent:
 ```jsonc
 // devcontainer.json settings
 {
-  "python.defaultInterpreterPath": "/buildcache/virtualenvs/qwen3-phone-deployment-py3.11/bin/python",
+  "python.defaultInterpreterPath": "/buildcache/venv/bin/python",
   "extensions": ["ms-python.python", "ms-python.vscode-pylance", "charliermarsh.ruff", "ms-toolsai.jupyter"]
 }
 ```
@@ -185,12 +252,20 @@ build artifacts with irreplaceable data. With two volumes, a corrupted
 venv can be fixed by deleting `eval-buildcache` and re-running `setup.sh`
 without touching datasets or eval results.
 
-### Poetry vs. pip + venv
+### uv vs. Poetry vs. pip + venv
 
-Poetry provides deterministic lockfile resolution, grouped dependencies
-(dev vs. production), and a single `poetry install` command. The
-`POETRY_VIRTUALENVS_PATH` env var cleanly redirects the venv location
-without patching Poetry internals.
+uv is a Rust-based Python package manager (from Astral, the ruff team).
+It replaces Poetry with faster resolution and installs — cold installs
+that take minutes with Poetry complete in seconds with uv. Key advantages:
+
+- **Speed**: 10–100× faster than pip/Poetry for resolution and install
+- **Single binary**: Copied from a multi-stage Docker image (`COPY --from`),
+  no installer script or runtime dependencies
+- **PEP 621 native**: Uses standard `[project]` table in pyproject.toml
+  instead of Poetry's proprietary `[tool.poetry]` format
+- **`UV_PROJECT_ENVIRONMENT`**: Redirects the venv to the path set by `VENV_DIR`
+- **`UV_CACHE_DIR`**: Controls all download/build caching, set from `PKG_CACHE_DIR`
+- **Deterministic lockfile**: `uv.lock` (cross-platform, hash-verified)
 
 ### `PYTHONPYCACHEPREFIX` vs. `PYTHONDONTWRITEBYTECODE`
 
@@ -205,10 +280,10 @@ approach keeps performance while maintaining workspace purity.
 
 | File | Role | Key responsibility |
 |------|------|--------------------|
-| `.devcontainer/Dockerfile` | Image definition | Base image, Poetry, non-root user, SSH |
+| `.devcontainer/Dockerfile` | Image definition | Base image, uv, non-root user, SSH |
 | `.devcontainer/devcontainer.json` | Container config | Volumes, env vars, GPU passthrough, extensions |
 | `.devcontainer/setup.sh` | Post-create script | Idempotent dependency install, dataset caching, GPU check |
-| `pyproject.toml` | Project/tool config | Dependencies, cache dir overrides for pytest/ruff/mypy |
+| `pyproject.toml` | Project/tool config | Dependencies (PEP 621), cache dir overrides for pytest/ruff/mypy |
 | `tests/conftest.py` | Test fixtures | `QAT_MODEL_DIR` env var, session-scoped model loading |
 | `training/RUNPOD_EVAL_WORKFLOW.md` | Workflow guide | Step-by-step RunPod deployment and evaluation procedure |
 

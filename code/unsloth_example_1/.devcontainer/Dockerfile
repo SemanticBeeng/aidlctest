@@ -13,11 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry into a fixed location
-ENV POETRY_HOME="/opt/poetry"
-ENV PATH="${POETRY_HOME}/bin:${PATH}"
-RUN curl -sSL https://install.python-poetry.org | python3 - \
-    && poetry config virtualenvs.create true
+# Install uv — fast Python package manager (single static binary)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+ENV PATH="/usr/local/bin:${PATH}"
 
 # Create non-root user for VS Code (RunPod defaults to root)
 ARG USERNAME=vscode

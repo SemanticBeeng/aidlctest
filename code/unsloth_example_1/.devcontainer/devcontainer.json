@@ -21,8 +21,8 @@
 
   "containerEnv": {
     // ── Build byproducts → /buildcache (named volume, never in workspace) ──
-    "POETRY_VIRTUALENVS_PATH": "/buildcache/virtualenvs",
-    "PIP_CACHE_DIR": "/buildcache/pip-cache",
+    "VENV_DIR": "/buildcache/venv",
+    "PKG_CACHE_DIR": "/buildcache/pkg-cache",
     "PYTHONPYCACHEPREFIX": "/buildcache/pycache",
     "MYPY_CACHE_DIR": "/buildcache/mypy",
     "RUFF_CACHE_DIR": "/buildcache/ruff",
@@ -48,7 +48,7 @@
         "ms-toolsai.jupyter"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/buildcache/virtualenvs/qwen3-phone-deployment-py3.11/bin/python",
+        "python.defaultInterpreterPath": "/buildcache/venv/bin/python",
         "python.terminal.activateEnvironment": true,
         "terminal.integrated.defaultProfile.linux": "bash"
       }

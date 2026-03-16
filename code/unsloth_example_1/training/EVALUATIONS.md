@@ -113,7 +113,7 @@ You must have a trained model saved in `phone_model/` (produced by
 `qwen3_phone_deployment.py`). If you haven't trained yet:
 
 ```bash
-poetry run python training/qwen3_phone_deployment.py
+uv run python training/qwen3_phone_deployment.py
 ```
 
 ### 2. OpenAI API Key
@@ -132,11 +132,11 @@ expect ~$2–5 per full evaluation run.
 ### 3. Python Dependencies
 
 ```bash
-poetry install
+uv sync --locked
 ```
 
 This installs `deepeval` and `pytest` from the dev dependency group in
-`pyproject.toml`.
+`pyproject.toml`, using exact versions from `uv.lock`.
 
 ### 4. Hardware
 
@@ -368,7 +368,7 @@ The simplest way. Runs all suites sequentially, saves results to `eval_results/`
 ```bash
 # Basic run (math + chat, skip regression and export parity)
 export OPENAI_API_KEY="sk-..."
-poetry run python training/evaluate_model.py
+uv run python training/evaluate_model.py
 ```
 
 #### Environment Variable Overrides
@@ -383,10 +383,10 @@ poetry run python training/evaluate_model.py
 
 ```bash
 # Full run with regression
-SKIP_BASE_MODEL=false poetry run python training/evaluate_model.py
+SKIP_BASE_MODEL=false uv run python training/evaluate_model.py
 
 # Quick smoke test (fewer samples)
-N_MATH_EVAL=10 N_CHAT_EVAL=5 poetry run python training/evaluate_model.py
+N_MATH_EVAL=10 N_CHAT_EVAL=5 uv run python training/evaluate_model.py
 ```
 
 ### Method 2: Interactive with marimo
@@ -394,7 +394,7 @@ N_MATH_EVAL=10 N_CHAT_EVAL=5 poetry run python training/evaluate_model.py
 Run cells interactively, inspect intermediate results, modify configuration on the fly.
 
 ```bash
-poetry run marimo edit training/evaluate_model.py
+uv run marimo edit training/evaluate_model.py
 ```
 
 The file uses `# %%` cell markers (8 sections), so each section can be run
@@ -407,10 +407,10 @@ Best for CI/CD integration. Each test case becomes a separate pass/fail result.
 ```bash
 # Run all evaluation tests
 export OPENAI_API_KEY="sk-..."
-poetry run deepeval test run tests/test_model_quality.py
+uv run deepeval test run tests/test_model_quality.py
 
 # Or with standard pytest (less DeepEval-specific output)
-poetry run pytest tests/test_model_quality.py -v
+uv run pytest tests/test_model_quality.py -v
 ```
 
 #### How pytest Tests Work
@@ -437,18 +437,18 @@ poetry run pytest tests/test_model_quality.py -v
 
 ```bash
 # Only math tests
-poetry run pytest tests/test_model_quality.py::TestMathCorrectness -v
+uv run pytest tests/test_model_quality.py::TestMathCorrectness -v
 
 # Only reasoning tests
-poetry run pytest tests/test_model_quality.py::TestReasoningQuality -v
+uv run pytest tests/test_model_quality.py::TestReasoningQuality -v
 
 # Only chat quality tests (all three sub-metrics)
-poetry run pytest tests/test_model_quality.py::TestChatRelevancy \
+uv run pytest tests/test_model_quality.py::TestChatRelevancy \
                   tests/test_model_quality.py::TestChatToxicity \
                   tests/test_model_quality.py::TestChatBias -v
 
 # A single test case
-poetry run pytest "tests/test_model_quality.py::TestMathCorrectness::test_math_correctness[0]" -v
+uv run pytest "tests/test_model_quality.py::TestMathCorrectness::test_math_correctness[0]" -v
 ```
 
 ### Method 4: Python API (Programmatic)
@@ -621,7 +621,7 @@ and historical tracking.
 deepeval login
 
 # Run tests — results auto-upload to dashboard
-poetry run deepeval test run tests/test_model_quality.py
+uv run deepeval test run tests/test_model_quality.py
 ```
 
 ### Dashboard Features
@@ -657,11 +657,11 @@ all GEval, Relevancy, Toxicity, and Bias metrics will fail.
 **`phone_model/ not found`**
 Run training first:
 ```bash
-poetry run python training/qwen3_phone_deployment.py
+uv run python training/qwen3_phone_deployment.py
 ```
 Or point to a different directory:
 ```bash
-QAT_MODEL_DIR=/path/to/model poetry run python training/evaluate_model.py
+QAT_MODEL_DIR=/path/to/model uv run python training/evaluate_model.py
 ```
 
 **`CUDA out of memory`**
@@ -672,7 +672,7 @@ QAT_MODEL_DIR=/path/to/model poetry run python training/evaluate_model.py
 
 **`ModuleNotFoundError: No module named 'deepeval'`**
 ```bash
-poetry install  # installs dev dependencies including deepeval
+uv sync --locked  # installs dev dependencies including deepeval
 ```
 
 **`ModuleNotFoundError: No module named 'training'`**
@@ -680,7 +680,7 @@ When running pytest, Python needs to find the `training` package. Either:
 ```bash
 # Option 1: Run from project root
 cd /path/to/aidlctest
-poetry run pytest tests/test_model_quality.py -v
+uv run pytest tests/test_model_quality.py -v
 
 # Option 2: Install in editable mode
 pip install -e .

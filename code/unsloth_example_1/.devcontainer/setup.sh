@@ -7,7 +7,11 @@ echo "============================================"
 echo "  Dev Container Setup — RunPod Eval Runner"
 echo "============================================"
 
-# ── 1. Ensure volume mount points are writable ──
+# ── 1. Map generic env vars to tool-specific ones (uv) ──
+export UV_PROJECT_ENVIRONMENT="${VENV_DIR:-/buildcache/venv}"
+export UV_CACHE_DIR="${PKG_CACHE_DIR:-/buildcache/pkg-cache}"
+
+# ── 2. Ensure volume mount points are writable ──
 for dir in /buildcache /data /data/eval_results /data/huggingface; do
     if [ -d "$dir" ]; then
         sudo chown -R "$(id -u):$(id -g)" "$dir" 2>/dev/null || true
@@ -18,30 +22,28 @@ for dir in /buildcache /data /data/eval_results /data/huggingface; do
 done
 
 # Create buildcache subdirectories
-mkdir -p /buildcache/virtualenvs /buildcache/pip-cache /buildcache/pycache \
+mkdir -p /buildcache/venv /buildcache/pkg-cache /buildcache/pycache \
          /buildcache/pytest /buildcache/ruff /buildcache/mypy
 
-# ── 2. Install Python dependencies (cached on /buildcache volume) ──
-VENV_MARKER="/buildcache/.poetry-installed"
+# ── 3. Install Python dependencies (cached on /buildcache volume) ──
+VENV_MARKER="/buildcache/.uv-installed"
 
 cd /workspace
 
 if [ ! -f "$VENV_MARKER" ]; then
     echo ""
-    echo "▸ First run: installing Poetry dependencies to /buildcache/virtualenvs ..."
-    poetry config virtualenvs.path /buildcache/virtualenvs
-    poetry install --no-interaction
+    echo "▸ First run: installing dependencies to /buildcache/venv ..."
+    uv sync --locked
     touch "$VENV_MARKER"
     echo "  ✓ Dependencies installed."
 else
     echo ""
     echo "▸ Syncing dependencies (venv exists on volume) ..."
-    poetry config virtualenvs.path /buildcache/virtualenvs
-    poetry install --no-interaction --no-root
+    uv sync --locked
     echo "  ✓ Dependencies synced."
 fi
 
-# ── 3. Pre-download evaluation datasets (cached on /data volume) ──
+# ── 4. Pre-download evaluation datasets (cached on /data volume) ──
 MATH_CACHE="/data/huggingface/hub/datasets--nvidia--OpenMathReasoning-mini"
 CHAT_CACHE="/data/huggingface/hub/datasets--mlabonne--FineTome-100k"
 
@@ -50,7 +52,7 @@ echo "▸ Checking dataset cache ..."
 
 if [ ! -d "$MATH_CACHE" ]; then
     echo "  Downloading OpenMathReasoning-mini ..."
-    poetry run python -c "
+    uv run python -c "
 from datasets import load_dataset
 load_dataset('nvidia/OpenMathReasoning-mini', split='cot')
 print('  ✓ OpenMathReasoning-mini cached.')
@@ -61,7 +63,7 @@ fi
 
 if [ ! -d "$CHAT_CACHE" ]; then
     echo "  Downloading FineTome-100k ..."
-    poetry run python -c "
+    uv run python -c "
 from datasets import load_dataset
 load_dataset('mlabonne/FineTome-100k', split='train')
 print('  ✓ FineTome-100k cached.')
@@ -70,10 +72,10 @@ else
     echo "  ✓ FineTome-100k already cached."
 fi
 
-# ── 4. Verify GPU availability ──
+# ── 5. Verify GPU availability ──
 echo ""
 echo "▸ GPU status:"
-poetry run python -c "
+uv run python -c "
 import torch
 if torch.cuda.is_available():
     name = torch.cuda.get_device_name(0)
@@ -83,7 +85,7 @@ else:
     print('  ✗ No CUDA GPU detected — model inference will fail.')
 " 2>/dev/null || echo "  ✗ Could not check GPU (torch not yet installed?)."
 
-# ── 5. Check for required env vars ──
+# ── 6. Check for required env vars ──
 echo ""
 echo "▸ Environment check:"
 if [ -n "${OPENAI_API_KEY:-}" ]; then
@@ -93,7 +95,7 @@ else
     echo "    Set it: export OPENAI_API_KEY='sk-...'"
 fi
 
-# ── 6. Check for trained model ──
+# ── 7. Check for trained model ──
 if [ -d "/workspace/phone_model" ] || [ -d "/data/phone_model" ]; then
     echo "  ✓ Trained model found."
 else
@@ -104,5 +106,5 @@ fi
 echo ""
 echo "============================================"
 echo "  Setup complete. Run evals with:"
-echo "    poetry run pytest tests/test_model_quality.py -v"
+echo "    uv run pytest tests/test_model_quality.py -v"
 echo "============================================"

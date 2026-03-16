@@ -14,8 +14,8 @@ Local Machine                          RunPod Pod (GPU)
 │  + Remote   │                  │  ┌───────────────────────────────┐  │
 │    SSH ext  │                  │  │ /workspace   ← git clone      │  │
 │             │                  │  │ /buildcache  ← Named Volume 1  │  │
-│             │                  │  │   virtualenvs/  (Poetry venv) │  │
-│             │                  │  │   pip-cache/                  │  │
+│             │                  │  │   venv/          (uv venv)    │  │
+│             │                  │  │   pkg-cache/                   │  │
 │             │                  │  │   pycache/ pytest/ ruff/ mypy/│  │
 │             │                  │  │ /data        ← Named Volume 2  │  │
 │             │                  │  │   huggingface/  (datasets)    │  │
@@ -38,14 +38,14 @@ RunPod as network volumes.
 
 | File | Purpose |
 |------|---------|
-| [`.devcontainer/Dockerfile`](../.devcontainer/Dockerfile) | Container image: PyTorch + CUDA + Poetry + SSH |
+| [`.devcontainer/Dockerfile`](../.devcontainer/Dockerfile) | Container image: PyTorch + CUDA + uv + SSH |
 | [`.devcontainer/devcontainer.json`](../.devcontainer/devcontainer.json) | VS Code dev container config: volumes, env vars, extensions |
 | [`.devcontainer/setup.sh`](../.devcontainer/setup.sh) | Post-create script: installs deps, caches datasets, checks GPU |
 | [`training/evaluate_model.py`](evaluate_model.py) | Standalone evaluation orchestrator (10 metrics, 5 suites) |
 | [`tests/conftest.py`](../tests/conftest.py) | Session-scoped pytest fixtures for model/data/test-cases |
 | [`tests/test_model_quality.py`](../tests/test_model_quality.py) | 13 parametrized test classes (~210 tests) |
 | [`training/EVALUATIONS.md`](EVALUATIONS.md) | Detailed evaluation guide (metrics, thresholds, interpretation) |
-| [`pyproject.toml`](../pyproject.toml) | Poetry dependencies (deepeval, pytest, unsloth, etc.) |
+| [`pyproject.toml`](../pyproject.toml) | uv dependencies (deepeval, pytest, unsloth, etc.) |
 
 ---
 
@@ -68,7 +68,7 @@ in the **same data center region** you'll launch pods in:
 
 | Volume Name | Size | Purpose |
 |-------------|------|---------|
-| `eval-buildcache` | 20 GB | Poetry virtualenv, pip cache, `__pycache__`, tool caches |
+| `eval-buildcache` | 20 GB | uv venv, download cache, `__pycache__`, tool caches |
 | `eval-datasets` | 50 GB | HuggingFace datasets, trained models, eval results |
 
 > **Cost**: Network volumes cost ~$0.07/GB/month when idle.
@@ -141,7 +141,7 @@ git clone https://github.com/SemanticBeeng/aidlctest.git .
    **"Reopen in Container"** — click it.
 
 6. The dev container builds, then runs [`setup.sh`](../.devcontainer/setup.sh):
-   - Installs Poetry dependencies to `/buildcache/virtualenvs/`
+   - Installs dependencies via `uv sync --locked` to `/buildcache/venv/`
    - Downloads datasets to `/data/huggingface/`
    - Verifies GPU and env vars
 
@@ -155,45 +155,45 @@ All commands assume you're in the dev container terminal in VS Code.
 
 ```bash
 cd /workspace/code/unsloth_example_1
-poetry run pytest tests/test_model_quality.py -v -k "TestMathCorrectness" --co | head -5
+uv run pytest tests/test_model_quality.py -v -k "TestMathCorrectness" --co | head -5
 ```
 
 ### Full eval suite (~15 min, ~$2-5 OpenAI cost)
 
 ```bash
-poetry run pytest tests/test_model_quality.py -v
+uv run pytest tests/test_model_quality.py -v
 ```
 
 ### Individual test classes
 
 ```bash
 # Math-only (COT format, think tokens, answer extraction)
-poetry run pytest tests/test_model_quality.py -v \
+uv run pytest tests/test_model_quality.py -v \
   -k "TestMathCorrectness or TestCOTFormat or TestThinkToken or TestFinalAnswer"
 
 # Chat-only (relevancy, toxicity, bias, instruction following)
-poetry run pytest tests/test_model_quality.py -v \
+uv run pytest tests/test_model_quality.py -v \
   -k "TestChat or TestInstruction or TestResponseCompleteness"
 
 # Multi-turn coherence
-poetry run pytest tests/test_model_quality.py -v -k "TestMultiTurn"
+uv run pytest tests/test_model_quality.py -v -k "TestMultiTurn"
 
 # Programmatic checks only (no OpenAI API calls)
-poetry run pytest tests/test_model_quality.py -v \
+uv run pytest tests/test_model_quality.py -v \
   -k "TestThinkToken or TestExpectedAnswer or TestAnswerExtractability"
 ```
 
 ### Standalone orchestrator (outside pytest)
 
 ```bash
-poetry run python training/evaluate_model.py
+uv run python training/evaluate_model.py
 ```
 
 ### With Confident AI dashboard tracking
 
 ```bash
 deepeval login                                           # one-time
-poetry run deepeval test run tests/test_model_quality.py  # auto-pushes results
+uv run deepeval test run tests/test_model_quality.py  # auto-pushes results
 ```
 
 ---
@@ -237,22 +237,21 @@ Never stored in the project workspace.
 
 ```
 /buildcache/
-├── .poetry-installed        ← marker: skip reinstall on next boot
-├── pip-cache/               ← pip download cache
+├── .uv-installed            ← marker: skip reinstall on next boot
+├── pkg-cache/               ← package download cache
 ├── pycache/                 ← PYTHONPYCACHEPREFIX target
 ├── pytest/                  ← pytest cache
 ├── ruff/                    ← ruff lint cache
 ├── mypy/                    ← mypy type-check cache
-└── virtualenvs/
-    └── qwen3-phone-deployment-py3.11/
-        ├── bin/python       ← interpreter used by VS Code
-        ├── lib/python3.11/site-packages/
-        │   ├── deepeval/
-        │   ├── torch/
-        │   ├── unsloth/
-        │   ├── transformers/
-        │   └── ...
-        └── ...
+└── venv/
+    ├── bin/python           ← interpreter used by VS Code
+    ├── lib/python3.11/site-packages/
+    │   ├── deepeval/
+    │   ├── torch/
+    │   ├── unsloth/
+    │   ├── transformers/
+    │   └── ...
+    └── ...
 ```
 
 ### `/data` — Datasets & Artifacts (50 GB)
@@ -282,7 +281,7 @@ To run a pre-training baseline evaluation against the unmodified Qwen3-0.6B:
 # Override model path to use HuggingFace base model
 export QAT_MODEL_DIR="unsloth/Qwen3-0.6B"
 
-poetry run pytest tests/test_model_quality.py -v
+uv run pytest tests/test_model_quality.py -v
 ```
 
 This downloads the base model to `/data/huggingface/` and evaluates it.
@@ -302,14 +301,23 @@ Compare results against a post-training run to measure QAT impact.
 Ensure the volumes are in the **same data center region** as the pod.
 Volumes cannot be mounted cross-region.
 
-### `poetry install` is slow
+### `uv sync` is slow
 
 First run downloads ~4 GB of packages. Subsequent runs use the cached
 venv on `/buildcache` and complete in seconds. If the venv seems corrupted:
 
 ```bash
-rm /buildcache/.poetry-installed
+rm /buildcache/.uv-installed
 bash .devcontainer/setup.sh
+```
+
+### `uv sync --locked` fails with "lockfile out of date"
+
+The lockfile doesn't match `pyproject.toml`. Re-lock and commit:
+
+```bash
+uv lock
+git add uv.lock && git commit -m "update uv.lock"
 ```
 
 ### Out of VRAM
@@ -331,10 +339,10 @@ run without an API key.
 
 The interpreter path is set in [`devcontainer.json`](../.devcontainer/devcontainer.json):
 ```
-/buildcache/virtualenvs/qwen3-phone-deployment-py3.11/bin/python
+/buildcache/venv/bin/python
 ```
-If Poetry created the venv with a different name, check:
+If uv created the venv with a different name, check:
 ```bash
-ls /buildcache/virtualenvs/
+ls /buildcache/venv/
 ```
 Then update the `python.defaultInterpreterPath` setting.

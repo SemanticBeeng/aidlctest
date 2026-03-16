@@ -1,34 +1,36 @@
-[tool.poetry]
+[project]
 name = "qwen3-phone-deployment"
 version = "0.1.0"
 description = "Qwen3-0.6B QAT training pipeline for phone deployment via Unsloth + ExecuTorch"
 readme = "training/README.md"
-package-mode = false
+requires-python = ">=3.10,<3.13"
 
-[tool.poetry.dependencies]
-python = ">=3.10,<3.13"
-unsloth = "*"
-transformers = "4.57.3"
-trl = "0.25.1"
-torchao = "0.14.0"
-optimum = "1.24.0"
-executorch = "*"
-pytorch-tokenizers = "*"
-datasets = "4.3.0"
-huggingface_hub = ">=0.34.0"
-hf_transfer = "*"
-sentencepiece = "*"
-protobuf = "*"
-pandas = "*"
+dependencies = [
+    "unsloth",
+    "transformers==4.57.3",
+    "trl==0.25.1",
+    "torchao==0.14.0",
+    "optimum==1.24.0",
+    "executorch",
+    "pytorch-tokenizers",
+    "datasets==4.3.0",
+    "huggingface_hub>=0.34.0",
+    "hf_transfer",
+    "sentencepiece",
+    "protobuf",
+    "pandas",
+]
 
-[tool.poetry.group.dev.dependencies]
-marimo = "*"
-deepeval = "*"
-pytest = ">=7.0"
+[dependency-groups]
+dev = [
+    "marimo",
+    "deepeval",
+    "pytest>=7.0",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 # Build byproducts → /buildcache (never in the project workspace)
 [tool.pytest.ini_options]

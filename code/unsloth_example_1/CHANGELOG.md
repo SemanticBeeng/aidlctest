@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased] — 2026-03-13
+
+### Changed
+
+- **Package manager**: Replaced Poetry with **uv** (Astral, Rust-based)
+  - Dockerfile: removed Poetry installer, added `COPY --from=ghcr.io/astral-sh/uv:latest`
+  - devcontainer.json: `POETRY_VIRTUALENVS_PATH` → `VENV_DIR`,
+    `PIP_CACHE_DIR` → `PKG_CACHE_DIR`, interpreter path → `/buildcache/venv/bin/python`
+  - setup.sh maps generic vars to tool-specific ones:
+    `VENV_DIR` → `UV_PROJECT_ENVIRONMENT`, `PKG_CACHE_DIR` → `UV_CACHE_DIR`
+  - setup.sh: `poetry install` → `uv sync --locked`, `poetry run` → `uv run`,
+    marker file `.poetry-installed` → `.uv-installed`
+  - `uv.lock` to be committed for deterministic cross-environment installs;
+    `--locked` flag ensures `setup.sh` fails fast if lockfile is stale
+  - pyproject.toml: `[tool.poetry]` → PEP 621 `[project]` table,
+    `[tool.poetry.group.dev.dependencies]` → `[dependency-groups]`,
+    build backend `poetry-core` → `hatchling`
+  - All docs (EVALUATIONS.md, README.md, RUNPOD_EVAL_WORKFLOW.md,
+    DEVCONTAINER_DESIGN.md): `poetry run` → `uv run`, `poetry install` → `uv sync`
+  - `/buildcache/virtualenvs/` → `/buildcache/venv/`,
+    `/buildcache/pip-cache/` → `/buildcache/pkg-cache/`
+
+---
+
 ## [Unreleased] — 2026-03-12
 
 ### Added

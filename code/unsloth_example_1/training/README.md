@@ -19,7 +19,7 @@ This pipeline trains Qwen3-0.6B using **Quantization-Aware Training (QAT)** with
 
 | File | Description |
 |------|-------------|
-| `../pyproject.toml` | Poetry dependency manifest |
+| `../pyproject.toml` | uv dependency manifest |
 | `qwen3_phone_deployment.py` | Complete training pipeline (marimo / VS Code cell compatible) |
 | `export_executorch.sh` | Standalone shell script for ExecuTorch export |
 
@@ -27,22 +27,22 @@ This pipeline trains Qwen3-0.6B using **Quantization-Aware Training (QAT)** with
 
 ### 1. Install dependencies
 ```bash
-poetry install
+uv sync --locked
 ```
 
 ### 2. Run training
 ```bash
 # As a script
-poetry run python training/qwen3_phone_deployment.py
+uv run python training/qwen3_phone_deployment.py
 
 # Or interactively with marimo
-poetry run marimo edit training/qwen3_phone_deployment.py
+uv run marimo edit training/qwen3_phone_deployment.py
 ```
 
 ### 3. Export to .pte (if not done in step 2)
 ```bash
 cd training
-poetry run bash export_executorch.sh
+uv run bash export_executorch.sh
 ```
 
 ## Hardware Requirements
