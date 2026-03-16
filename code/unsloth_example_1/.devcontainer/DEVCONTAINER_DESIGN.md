@@ -96,12 +96,12 @@ allows deleting/recreating the build cache without risking data loss.
 
 The Docker name and RunPod name are intentionally the same
 (`eval-buildcache`, `eval-datasets`) but they are **different volumes**
-created and managed by different systems. They never coexist — only one
-is active depending on where the container runs.
+created and managed by different systems. Only one is active depending
+on where the container runs.
 
 | Environment | Who creates the volume | Backing storage | Lifecycle |
 |---|---|---|---|
-| **Local Docker** | Docker Engine, on first `docker compose up` or dev container open | Docker-managed directory on host (e.g. `/var/lib/docker/volumes/eval-buildcache/`) | Survives container rebuilds; deleted by `docker volume rm eval-buildcache` |
+| **Local Docker** | Docker Engine, on first dev container open | Docker-managed directory on host (e.g. `/var/lib/docker/volumes/eval-buildcache/`) | Survives container rebuilds; deleted by `docker volume rm eval-buildcache` |
 | **RunPod** | Operator, via RunPod Dashboard → Storage → Network Volumes | RunPod network-attached block storage in the selected data center | Persists across pod stop/start/destroy; deleted via Dashboard |
 
 **How to tell which is in use**: Inside the container, `/buildcache`
@@ -115,27 +115,73 @@ docker volume inspect eval-buildcache   # shows Mountpoint on host
 df -h /buildcache                       # shows network volume device
 ```
 
-**The workflow**:
+#### Volume dataflow: local → RunPod
 
-1. **Local development** — `eval-buildcache` is a local Docker volume.
-   Opening the dev container creates it if missing. `setup.sh` populates
-   `venv/` and `pkg-cache/`. This volume cannot be transferred to RunPod.
+The build cache is **built once locally, then synced to RunPod**. There
+is no second build on the remote pod. The dataflow is one-directional:
 
-2. **RunPod deployment** — The operator creates a RunPod network volume
-   also named `eval-buildcache` (20 GB) in the target data center. On
-   first pod launch, it is empty. `setup.sh` runs `uv sync` which
-   populates `venv/` and `pkg-cache/` from scratch (~4 GB download).
-   Subsequent pod launches reuse the populated volume (marker file
-   `/buildcache/.uv-installed` skips reinstall).
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ LOCAL                                                               │
+│                                                                     │
+│  1. Open dev container                                              │
+│     └─ setup.sh runs `uv sync --locked`                            │
+│     └─ populates eval-buildcache Docker volume:                     │
+│          /buildcache/venv/       (~4 GB: torch, unsloth, etc.)      │
+│          /buildcache/pkg-cache/  (uv download cache)                │
+│          /buildcache/.uv-installed  (marker file)                   │
+│                                                                     │
+│  2. Export volume to tar                                            │
+│     docker run --rm \                                               │
+│       -v eval-buildcache:/src:ro \                                  │
+│       -v $(pwd):/out \                                              │
+│       alpine tar czf /out/buildcache.tar.gz -C /src .               │
+│                                                                     │
+│  3. Upload to RunPod pod (network volume mounted)                   │
+│     scp buildcache.tar.gz runpod-eval:/buildcache/                  │
+│     ssh runpod-eval "cd /buildcache && tar xzf buildcache.tar.gz    │
+│       && rm buildcache.tar.gz"                                      │
+│                                                                     │
+└───────────────────────────┬─────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ RUNPOD                                                              │
+│                                                                     │
+│  4. Launch pod with eval-buildcache network volume at /buildcache    │
+│     └─ Volume already contains venv/, pkg-cache/, .uv-installed     │
+│                                                                     │
+│  5. Open dev container ("Reopen in Container")                      │
+│     └─ setup.sh runs `uv sync --locked`                            │
+│     └─ Marker file .uv-installed exists → sync is a fast no-op     │
+│     └─ No packages downloaded, no resolution, seconds to start      │
+│                                                                     │
+│  6. Run evals immediately                                           │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-3. **No sync between them** — The local and RunPod volumes are
-   independent. Rebuilding locally does not affect RunPod, and vice
-   versa. Both install identical packages because `uv sync --locked`
-   reads the committed `uv.lock`, which pins every transitive
-   dependency with exact versions and hashes. The inputs are
-   `pyproject.toml` (direct deps) + `uv.lock` (resolved graph) +
-   `setup.sh` (orchestration). As long as the same git commit is
-   checked out, both environments are byte-for-byte identical.
+**Why this works**: The venv is portable between local and RunPod
+because both use the same container image (same Dockerfile, same base
+image, same Python 3.11, same system libraries). The venv path
+(`/buildcache/venv`) is identical in both environments. Python venvs
+are relocatable when the path does not change.
+
+**Why `uv sync --locked` still runs on RunPod**: Even with a
+pre-populated volume, `setup.sh` calls `uv sync --locked` on every
+container start. When the marker file exists, this is a fast
+verification pass (seconds, not minutes) that confirms the venv
+matches `uv.lock`. If a dependency was added locally and pushed via
+git but the volume hasn't been re-synced, `uv sync --locked` installs
+only the delta — avoiding a full rebuild while keeping the environment
+correct.
+
+**When to re-sync the volume**: After adding/removing dependencies
+locally (`uv add <pkg>` or editing `pyproject.toml` + `uv lock`), you
+have two options:
+- **Re-export and upload** the volume tar (guarantees identical state)
+- **Do nothing** — `uv sync --locked` on the next pod start will
+  install the missing packages from PyPI (fast for small deltas)
 
 #### Lockfile workflow
 

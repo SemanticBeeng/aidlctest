@@ -61,7 +61,7 @@ RunPod as network volumes.
 
 ---
 
-## Step 1: Create Network Volume (one-time)
+## Step 1: Create Network Volumes (one-time)
 
 In RunPod Dashboard → **Storage** → **Network Volumes**, create two volumes
 in the **same data center region** you'll launch pods in:
@@ -73,6 +73,45 @@ in the **same data center region** you'll launch pods in:
 
 > **Cost**: Network volumes cost ~$0.07/GB/month when idle.
 > 70 GB total = ~$4.90/month if kept attached.
+
+---
+
+## Step 1b: Sync Build Cache to RunPod (after local build)
+
+After opening the dev container locally (which runs `setup.sh` and
+populates the `eval-buildcache` Docker volume), export and upload it to
+the RunPod network volume. This avoids rebuilding on the GPU pod.
+
+### Export the local volume
+
+```bash
+# From your local machine (outside the container)
+docker run --rm \
+  -v eval-buildcache:/src:ro \
+  -v $(pwd):/out \
+  alpine tar czf /out/buildcache.tar.gz -C /src .
+```
+
+### Upload to RunPod
+
+Launch a minimal pod with the `eval-buildcache` network volume attached
+(or use an existing pod), then:
+
+```bash
+# Upload to the pod
+scp buildcache.tar.gz runpod-eval:/buildcache/
+
+# Extract on RunPod (SSH into the pod)
+ssh runpod-eval "cd /buildcache && tar xzf buildcache.tar.gz && rm buildcache.tar.gz"
+```
+
+After this, the RunPod network volume contains the fully built venv,
+package cache, and marker file. Subsequent pod launches skip the
+dependency install step entirely.
+
+> **When to re-sync**: After adding/removing dependencies locally. For
+> small deltas, you can skip re-syncing — `uv sync --locked` on the pod
+> will install only the missing packages from PyPI.
 
 ---
 
@@ -141,8 +180,9 @@ git clone https://github.com/SemanticBeeng/aidlctest.git .
    **"Reopen in Container"** — click it.
 
 6. The dev container builds, then runs [`setup.sh`](../.devcontainer/setup.sh):
-   - Installs dependencies via `uv sync --locked` to `/buildcache/venv/`
-   - Downloads datasets to `/data/huggingface/`
+   - Runs `uv sync --locked` — if the build cache was synced from local
+     (Step 1b), this is a fast no-op (marker file exists, venv matches lockfile)
+   - Downloads datasets to `/data/huggingface/` (cached on network volume)
    - Verifies GPU and env vars
 
 ---
