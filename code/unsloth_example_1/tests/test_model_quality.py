@@ -1,8 +1,8 @@
 """
 Model Quality Tests — DeepEval + pytest
 ========================================
-Run with:  poetry run deepeval test run tests/test_model_quality.py
-    or:    poetry run pytest tests/test_model_quality.py -v
+Run with:  uv run deepeval test run tests/test_model_quality.py
+    or:    uv run pytest tests/test_model_quality.py -v
 
 Dataset-specific evaluation suites:
 

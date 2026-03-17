@@ -34,14 +34,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **Dev container environment** for running evaluations on RunPod GPU pods
-  - `.devcontainer/Dockerfile` — PyTorch 2.4.0 + CUDA 12.4.1 + Poetry + SSH,
+  - `.devcontainer/Dockerfile` — PyTorch 2.4.0 + CUDA 12.4.1 + uv + SSH,
     non-root `vscode` user, pre-created `/buildcache` mount point
   - `.devcontainer/devcontainer.json` — GPU passthrough (`--gpus all`),
     two named Docker volumes (`eval-buildcache` at `/buildcache`,
     `eval-datasets` at `/data`), environment variables for all cache
     directories, VS Code extensions and Python interpreter path
-  - `.devcontainer/setup.sh` — idempotent post-create script: installs Poetry
-    deps to `/buildcache/virtualenvs`, downloads HuggingFace datasets to
+  - `.devcontainer/setup.sh` — idempotent post-create script: installs
+    deps to `/buildcache/venv`, downloads HuggingFace datasets to
     `/data/huggingface`, verifies GPU and env vars
 - **Evaluation documentation**
   - `training/EVALUATIONS.md` — comprehensive evaluation guide covering

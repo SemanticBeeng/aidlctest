@@ -13,7 +13,7 @@ Usage:
   - With marimo:       marimo edit qwen3_phone_deployment.py
   - In VS Code:        Run individual cells via '# %%' markers
 
-Requirements: See pyproject.toml (managed by Poetry)
+Requirements: See pyproject.toml (managed by uv)
 GPU: Requires CUDA GPU (tested on Tesla T4, ~10.5 GB peak VRAM)
 """
 

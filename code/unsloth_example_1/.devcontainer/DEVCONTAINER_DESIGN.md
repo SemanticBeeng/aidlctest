@@ -116,7 +116,7 @@ is no second build on the remote pod. The dataflow is one-directional:
 │ LOCAL                                                               │
 │                                                                     │
 │  1. Open dev container                                              │
-│     └─ setup.sh runs `uv sync --locked`                            │
+│     └─ setup.sh runs `uv sync --locked`                             │
 │     └─ populates eval-buildcache Docker volume:                     │
 │          /buildcache/venv/       (~4 GB: torch, unsloth, etc.)      │
 │          /buildcache/pkg-cache/  (uv download cache)                │
@@ -139,13 +139,13 @@ is no second build on the remote pod. The dataflow is one-directional:
 ┌─────────────────────────────────────────────────────────────────────┐
 │ RUNPOD                                                              │
 │                                                                     │
-│  4. Launch pod with eval-buildcache network volume at /buildcache    │
+│  4. Launch pod with eval-buildcache network volume at /buildcache   │
 │     └─ Volume already contains venv/, pkg-cache/, .uv-installed     │
 │                                                                     │
 │  5. Open dev container ("Reopen in Container")                      │
-│     └─ setup.sh runs `uv sync --locked`                            │
-│     └─ Venv matches lockfile → verification only (1-3 seconds)     │
-│     └─ No packages downloaded, no resolution                       │
+│     └─ setup.sh runs `uv sync --locked`                             │
+│     └─ Venv matches lockfile → verification only (1-3 seconds)      │
+│     └─ No packages downloaded, no resolution                        │
 │                                                                     │
 │  6. Run evals immediately                                           │
 │                                                                     │
@@ -299,20 +299,23 @@ build artifacts with irreplaceable data. With two volumes, a corrupted
 venv can be fixed by deleting `eval-buildcache` and re-running `setup.sh`
 without touching datasets or eval results.
 
-### uv vs. Poetry vs. pip + venv
+### Why uv (not Poetry or pip + venv)
 
-uv is a Rust-based Python package manager (from Astral, the ruff team).
-It replaces Poetry with faster resolution and installs — cold installs
-that take minutes with Poetry complete in seconds with uv. Key advantages:
+uv is a Rust-based Python package manager (from Astral, the ruff team)
+that **fully replaces** Poetry in this project. Poetry is not installed
+in the container and is not used at any stage. Key reasons for choosing
+uv:
 
-- **Speed**: 10–100× faster than pip/Poetry for resolution and install
+- **Speed**: 10–100× faster than pip for resolution and install
 - **Single binary**: Copied from a multi-stage Docker image (`COPY --from`),
   no installer script or runtime dependencies
 - **PEP 621 native**: Uses standard `[project]` table in pyproject.toml
-  instead of Poetry's proprietary `[tool.poetry]` format
+  (not a proprietary format)
 - **`UV_PROJECT_ENVIRONMENT`**: Redirects the venv to the path set by `VENV_DIR`
 - **`UV_CACHE_DIR`**: Controls all download/build caching, set from `PKG_CACHE_DIR`
 - **Deterministic lockfile**: `uv.lock` (cross-platform, hash-verified)
+- **Grouped dependencies**: `[dependency-groups]` in pyproject.toml for
+  dev vs. production separation (same capability as Poetry groups)
 
 ### `PYTHONPYCACHEPREFIX` vs. `PYTHONDONTWRITEBYTECODE`
 

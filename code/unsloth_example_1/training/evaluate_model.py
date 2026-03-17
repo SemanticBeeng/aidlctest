@@ -13,14 +13,14 @@ Covers five evaluation suites:
 Prerequisites:
   - Trained model saved in phone_model/ (from qwen3_phone_deployment.py)
   - OPENAI_API_KEY env var set (for LLM-as-judge metrics)
-  - poetry install (deepeval is a dev dependency)
+  - uv sync --locked (deepeval is a dev dependency)
 
 Usage:
   - As plain Python:  python evaluate_model.py
   - With marimo:       marimo edit evaluate_model.py
-  - As pytest:         poetry run deepeval test run tests/test_model_quality.py
+  - As pytest:         uv run deepeval test run tests/test_model_quality.py
 
-Requirements: See pyproject.toml (managed by Poetry)
+Requirements: See pyproject.toml (managed by uv)
 GPU: Requires CUDA GPU for model inference
 """
 
