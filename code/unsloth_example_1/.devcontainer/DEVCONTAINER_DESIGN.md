@@ -10,35 +10,26 @@ QAT evaluations on cloud GPU providers (RunPod).
 ### 1.1 Workspace Purity
 
 **Constraint**: No build byproducts may exist in the project workspace —
-not on the host filesystem, and not inside the container's `/workspace`
-bind mount.
+not on the host filesystem, and not inside the container's `/workspace` bind mount.
 
 **Byproducts covered**:
 - Python virtual environment (uv-managed venv)
-- pip download cache
+- uv download/build cache
 - `__pycache__` bytecode files (all packages)
 - Tool caches: pytest, ruff, mypy
 
-**Rationale**: The project workspace is a git clone. Build artifacts are
-large (4+ GB for PyTorch alone), machine-specific, and must not appear in
-`git status` or be accidentally committed.
+**Rationale**: The project workspace is a git clone. Build artifacts are large (4+ GB for PyTorch alone), machine-specific, and must not appear in`git status` or be accidentally committed.
 
 ### 1.2 Volume Portability
 
-**Constraint**: All persistent state must live on Docker volumes (not host
-bind mounts) so it can be transferred to cloud GPU providers.
+**Constraint**: All persistent state must live on Docker volumes (not host bind mounts) so it can be transferred to cloud GPU providers.
 
-**Rationale**: RunPod network volumes can be pre-populated and attached to
-disposable pods. A host bind mount like `~/appdata/tmp/builds/...` only
-works on a specific local machine and cannot be synced to a cloud pod.
-Named Docker volumes can be exported, transferred, or recreated from the
-same setup script.
+**Rationale**: RunPod network volumes can be pre-populated and attached to disposable pods. A host bind mount like `~/appdata/tmp/builds/...` only works on a specific local machine and cannot be synced to a cloud pod.
+Named Docker volumes can be exported, transferred, or recreated from the same setup script.
 
 ### 1.3 Pod Disposability
 
-**Constraint**: Pods are ephemeral. Destroying and recreating a pod must
-not lose installed dependencies, downloaded datasets, or evaluation
-results.
+**Constraint**: Pods are ephemeral. Destroying and recreating a pod must not lose installed dependencies, downloaded datasets, or evaluation results.
 
 **Rationale**: GPU pods cost $0.20–$1.00+/hr. Users stop/destroy pods
 between eval runs. All state that survives pod lifecycle must be on
@@ -153,8 +144,8 @@ is no second build on the remote pod. The dataflow is one-directional:
 │                                                                     │
 │  5. Open dev container ("Reopen in Container")                      │
 │     └─ setup.sh runs `uv sync --locked`                            │
-│     └─ Marker file .uv-installed exists → sync is a fast no-op     │
-│     └─ No packages downloaded, no resolution, seconds to start      │
+│     └─ Venv matches lockfile → verification only (1-3 seconds)     │
+│     └─ No packages downloaded, no resolution                       │
 │                                                                     │
 │  6. Run evals immediately                                           │
 │                                                                     │
@@ -167,14 +158,20 @@ image, same Python 3.11, same system libraries). The venv path
 (`/buildcache/venv`) is identical in both environments. Python venvs
 are relocatable when the path does not change.
 
+> **Architecture note**: The local Docker host must run Linux x86_64
+> containers. If building on macOS ARM (M1/M2/M3), Docker Desktop runs
+> the container under emulation — binary wheels may be built for a
+> different architecture, making the synced venv incompatible with
+> RunPod's native x86_64 GPU pods. Use `--platform linux/amd64` in
+> Docker Desktop settings or build on an x86_64 host.
+
 **Why `uv sync --locked` still runs on RunPod**: Even with a
 pre-populated volume, `setup.sh` calls `uv sync --locked` on every
-container start. When the marker file exists, this is a fast
-verification pass (seconds, not minutes) that confirms the venv
-matches `uv.lock`. If a dependency was added locally and pushed via
-git but the volume hasn't been re-synced, `uv sync --locked` installs
-only the delta — avoiding a full rebuild while keeping the environment
-correct.
+container start. This is not a no-op — uv verifies every package in
+the lockfile against the installed venv. When the venv is already
+current, verification completes in 1–3 seconds. If a dependency was
+added locally and pushed via git but the volume hasn't been re-synced,
+`uv sync --locked` installs only the delta.
 
 **When to re-sync the volume**: After adding/removing dependencies
 locally (`uv add <pkg>` or editing `pyproject.toml` + `uv lock`), you
@@ -221,8 +218,10 @@ environment variables or tool configuration:
 
 Environment variables are set in `devcontainer.json` → `containerEnv` so
 they apply to all shells and processes inside the container. Tool-specific
-config in `pyproject.toml` provides a fallback for contexts where env vars
-may not be loaded.
+config in `pyproject.toml` covers contexts outside the dev container
+(CI pipelines, local runs without Docker) where `containerEnv` is not
+loaded. Inside the container, both mechanisms point to the same paths;
+`pyproject.toml` is authoritative for pytest, ruff, and mypy.
 
 ### 2.3 Container Image
 
@@ -248,17 +247,19 @@ The post-create script runs in 7 ordered steps, each idempotent:
 1. **Env var mapping** — exports tool-specific vars from generic ones
    (`VENV_DIR` → `UV_PROJECT_ENVIRONMENT`, `PKG_CACHE_DIR` → `UV_CACHE_DIR`)
 2. **Volume permissions** — `chown` mount points to the `vscode` user
-   (RunPod network volumes may be owned by root initially)
-3. **Subdirectory creation** — create all `/buildcache/*` subdirectories
-4. **uv sync** — installs dependencies to
-   `/buildcache/venv/`; uses marker file
-   `/buildcache/.uv-installed` to skip on subsequent runs
-5. **Dataset download** — pre-caches OpenMathReasoning-mini and
+   (RunPod network volumes may be owned by root initially);
+   creates `/buildcache/*` subdirectories
+3. **uv sync** — runs `uv sync --locked` to install dependencies to
+   `/buildcache/venv/`. Always runs (verifies venv matches lockfile).
+   Marker file `/buildcache/.uv-installed` controls first-run vs.
+   sync messaging only — uv itself is fast when the venv is current
+4. **Dataset download** — pre-caches OpenMathReasoning-mini and
    FineTome-100k to `/data/huggingface/hub/`; checks for existing
    cache directories before downloading
 5. **GPU verification** — prints GPU name and VRAM via `torch.cuda`
-6. **Environment check** — warns if `OPENAI_API_KEY` is not set, checks
-   for trained model at `/workspace/phone_model` or `/data/phone_model`
+6. **Environment check** — warns if `OPENAI_API_KEY` is not set
+7. **Model check** — checks for trained model at
+   `/workspace/phone_model` or `/data/phone_model`
 
 ### 2.5 VS Code Integration
 
