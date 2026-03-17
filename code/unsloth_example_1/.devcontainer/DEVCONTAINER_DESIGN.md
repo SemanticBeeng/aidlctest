@@ -10,7 +10,8 @@ QAT evaluations on cloud GPU providers (RunPod).
 ### 1.1 Workspace Purity
 
 **Constraint**: No build byproducts may exist in the project workspace —
-not on the host filesystem, and not inside the container's `/workspace` bind mount.
+not on the host filesystem, and not inside the container's `/workspace` 
+bind mount.
 
 **Byproducts covered**:
 - Python virtual environment (uv-managed venv)
@@ -18,18 +19,25 @@ not on the host filesystem, and not inside the container's `/workspace` bind mou
 - `__pycache__` bytecode files (all packages)
 - Tool caches: pytest, ruff, mypy
 
-**Rationale**: The project workspace is a git clone. Build artifacts are large (4+ GB for PyTorch alone), machine-specific, and must not appear in`git status` or be accidentally committed.
+**Rationale**: The project workspace is a git clone. Build artifacts are 
+large (4+ GB for PyTorch alone), machine-specific, and must not appear in`
+git status` or be accidentally committed.
 
 ### 1.2 Volume Portability
 
-**Constraint**: All persistent state must live on Docker volumes (not host bind mounts) so it can be transferred to cloud GPU providers.
+**Constraint**: All persistent state must live on Docker volumes (not host 
+bind mounts) so it can be transferred to cloud GPU providers.
 
-**Rationale**: RunPod network volumes can be pre-populated and attached to disposable pods. A host bind mount like `~/appdata/tmp/builds/...` only works on a specific local machine and cannot be synced to a cloud pod.
-Named Docker volumes can be exported, transferred, or recreated from the same setup script.
+**Rationale**: RunPod network volumes can be pre-populated and attached to 
+disposable pods. A host bind mount like `~/appdata/tmp/builds/...` only 
+works on a specific local machine and cannot be synced to a cloud pod.
+Named Docker volumes can be exported, transferred, or recreated from the 
+same setup script.
 
 ### 1.3 Pod Disposability
 
-**Constraint**: Pods are ephemeral. Destroying and recreating a pod must not lose installed dependencies, downloaded datasets, or evaluation results.
+**Constraint**: Pods are ephemeral. Destroying and recreating a pod must 
+not lose installed dependencies, downloaded datasets, or evaluation results.
 
 **Rationale**: GPU pods cost $0.20–$1.00+/hr. Users stop/destroy pods
 between eval runs. All state that survives pod lifecycle must be on
