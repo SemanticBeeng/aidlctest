@@ -8,6 +8,86 @@ On the device use cactus inference engine. In terms of LLM we start with Qwen3."
 
 ---
 
+## Repo Maintenance Request - Changelog + Git Push
+**Timestamp**: 2026-03-19T23:07:19Z
+**User Input**: "document latest changes in changelog and push them to git repo"
+**AI Response**: "Will update an application-design changelog with the latest architecture addendum changes, then commit and push all modified files (audit log, review question file, architecture addendum)."
+**Context**: Documentation + source control maintenance.
+
+---
+
+## Architecture Addendum - Decision Criteria Elaborated (D-EVAL-SUT-02 vs D-SERVER-01)
+**Timestamp**: 2026-03-19T22:36:46Z
+**User Input**: "Elaborate on decision criteria between these 2 decisions D-EVAL-SUT-02 and D-SERVER-01 from the point of view of MVP of performing Qwen 3 evaluations for specific DeepEval tests in this particular implementation"
+**AI Response**: "Added a dedicated section explaining when in-process Unsloth SUT inference is preferred vs when migrating the SUT behind vLLM is required, mapped to the existing DeepEval suites in code/unsloth_example_1, with migration caveats (prompt/template/sampling/context drift) and an MVP sequencing recommendation (MVP0 → MVP0.5 → MVP1)."
+**Context**: Architecture documentation refinement.
+
+---
+
+## Architecture Addendum - Explicit References Added (D-EVAL-SUT-02)
+**Timestamp**: 2026-03-19T22:32:12Z
+**User Input**: "Make explicit any implicit reference to: Decision D-EVAL-SUT-02"
+**AI Response**: "Updated the compatibility section to explicitly cite Decision D-EVAL-SUT-02 wherever in-process SUT inference is mentioned, and clarified MVP0 intentional deviation vs MVP1 vLLM compliance path relative to D-MVP-03 and D-SERVER-01."
+**Context**: Documentation clarity fix.
+
+---
+
+## Architecture Addendum - Decision Reinserted
+**Timestamp**: 2026-03-19T22:20:50Z
+**User Input**: "The new Decision is missing: D-EVAL-SUT-02: MVP0 runs Qwen3-under-test inference in-process via Unsloth.  Generate it in the hybrid-inference-architecture-addendum.md"
+**AI Response**: "Reinserted Decision D-EVAL-SUT-02 into the architecture addendum under the MVP decision section, including rationale, tradeoffs, exit criteria, and the MVP1 transition to vLLM serving."
+**Context**: Architecture documentation fix.
+
+---
+
+## Architecture Addendum - Design Decision Added (In-Process vs Server Inference)
+**Timestamp**: 2026-03-19T21:47:07Z
+**User Input**: "> \" inference in-process in Python via Unsloth (FastLanguageModel.from_pretrained(...)) rather than via a server endpoint.\"\n\nMake an explicit design decision about this choice of model inference"
+**AI Response**: "Added Decision D-EVAL-SUT-02 to the architecture addendum: MVP0 runs Qwen3-under-test inference in-process via Unsloth for fast iteration and ground-truthing, with explicit tradeoffs and exit criteria to move the SUT behind a vLLM OpenAI-compatible endpoint (MVP1) to satisfy server-side scheduling/concurrency goals." 
+**Context**: Architecture refinement.
+
+---
+
+## Architecture Addendum - Compatibility Assessment Added
+**Timestamp**: 2026-03-19T21:40:54Z
+**AI Response**: "Reviewed the existing Unsloth example implementation and documented compatibility against vLLM-oriented MVP decisions (D-MVP-03, D-SERVER-01). Added an explicit section noting that the current eval pipeline runs the SUT in-process and uses OpenAI GPT-4 by default as judge, and outlined minimal alignment paths (judge-first vs full vLLM endpoints)."
+**Context**: Architecture consistency documentation.
+
+---
+
+## Architecture Verification Request - Unsloth Example vs vLLM Decisions
+**Timestamp**: 2026-03-19T21:32:25Z
+**User Input**: "Consider Unsloth  example as implementation:
+- research: /home/nkse/mirsci/projects/aidlctest/aidlc-docs/inception/application-design/unsloth-executorch-research.md
+- devcontainer name \"Qwen3 Eval (RunPod GPU)\"
+Check if that implementation is compatible with design decisions about vLLM: D-SERVER-01 and Decision D-MVP-03"
+**AI Response**: "Will review the referenced research and the current evaluation implementation to determine whether it uses vLLM/OpenAI-compatible serving already, and whether switching to vLLM aligns with the documented MVP server-side decisions. Findings will be reported with concrete evidence (config/code references) and recommended adjustments if needed."
+**Context**: Architecture consistency check.
+
+---
+
+## Architecture Addendum - Updates Applied
+**Timestamp**: 2026-03-19T21:18:01Z
+**AI Response**: "Updated the architecture addendum with explicit decisions for on-device inference runtime selection (Cactus vs ExecuTorch vs MLX) including a validated Mermaid decision diagram and text alternative; added DeepEval evaluation design decisions (separate SUT and judge services, reproducibility, bounded parallelism); and added an inference-server selection decision (vLLM vs Lemonade) with rationale and selection guide."
+**Context**: Architecture addendum iteration complete.
+
+---
+
+## Architecture Addendum - Change Requests Captured
+**Timestamp**: 2026-03-19T21:16:08Z
+**User Input**: "[Answer]: B) \nAdd design decisions for \n- device side inference (Cactus vs. MLX vs. ExecuTorch)\n- model evaluations using with DeepEval \n- inference server for DeepEval: vLLM vs Lemonade"
+**AI Response**: "Will update the architecture addendum with the requested explicit design decisions and rationale, including an on-device runtime decision, DeepEval evaluation topology decisions, and an inference-server selection guide (vLLM vs Lemonade)."
+**Context**: Architecture addendum iteration requested.
+
+---
+
+## Architecture Addendum - Review Response
+**Timestamp**: 2026-03-19T21:16:08Z
+**User Input**: "Review architecture-addendum-review-questions.md and update architecture"
+**Context**: User requested updates after completing architecture addendum review question file.
+
+---
+
 ## Architecture Addendum - Review Prompt
 **Timestamp**: 2026-03-19T15:06:14Z
 **AI Prompt**: "Please answer the review question in aidlc-docs/inception/application-design/architecture-addendum-review-questions.md so we can either lock the architecture addendum or iterate on changes."

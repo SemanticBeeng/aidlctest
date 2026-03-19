@@ -9,4 +9,8 @@ A) Approve as-is
 B) Request changes (please describe what to change after `[Answer]:`)
 X) Other (please describe after `[Answer]:`)
 
-[Answer]:
+[Answer]: B) 
+Add design decisions for 
+- device side inference (Cactus vs. MLX vs. ExecuTorch)
+- model evaluations using with DeepEval 
+- inference server for DeepEval: vLLM vs Lemonade
