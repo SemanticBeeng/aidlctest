@@ -8,6 +8,30 @@ On the device use cactus inference engine. In terms of LLM we start with Qwen3."
 
 ---
 
+## Architecture Addendum - Review Prompt
+**Timestamp**: 2026-03-19T15:06:14Z
+**AI Prompt**: "Please answer the review question in aidlc-docs/inception/application-design/architecture-addendum-review-questions.md so we can either lock the architecture addendum or iterate on changes."
+**Context**: Architecture addendum approval gate.
+
+---
+
+## Architecture Request - Hybrid Inference + DeepEval MVP
+**Timestamp**: 2026-03-19T15:02:44Z
+**User Input**: "The goal is to develop a flexible architecture that supports both on-device and server LLM model inference.
+The architecture should document
+ * all technologies: inference engines and frameworks mentioned above
+ * all key design concepts mentiond above with rich conceptual explanations
+ * design decisions expressed in concepts, technologies and with rationale
+ * decision making framework that can be used to re-evaluate
+
+The MVP for applying this architecture is efficient use of DeepEval for efficient model inference on the server for qwen3 LLM under test and LLama2 judge.  For this purpose make some best effort design decisions and make them explicit.
+
+For this MVP generate diagrams to communicate  this architecture using deployment and process flow diargams showing model evaluations being executed on this architecture ."
+**AI Response**: "Resuming from existing INCEPTION state (Application Design complete/pending approval). Will produce an architecture addendum documenting the full technology set, key inference concepts (token-level scheduling vs session partitioning, KV cache economics, quantization/VRAM tradeoffs, privacy proxy patterns), explicit design decisions + rationale, and a re-evaluation framework. Will implement the MVP as a concrete server-side DeepEval evaluation topology: Qwen3 under test served via an OpenAI-compatible inference server and Llama2 judge served separately, with validated Mermaid deployment and process-flow diagrams plus text fallbacks."
+**Context**: Inception architecture addendum + MVP evaluation topology documentation.
+
+---
+
 ## Workspace Detection
 **Timestamp**: 2026-03-10T21:48:33Z
 **User Input**: "Using AI-DLC, design and implement a hybrid LLM model inference architecture and application. Hybrid means model inference runs on mobile device as well as server."

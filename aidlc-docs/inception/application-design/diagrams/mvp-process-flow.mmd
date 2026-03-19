@@ -1,0 +1,12 @@
+sequenceDiagram
+    autonumber
+    participant D as DeepEval Runner
+    participant Q as Qwen3 Server (Under Test)
+    participant J as Llama2 Server (Judge)
+    participant R as Results Store
+
+    D->>Q: Generate actual_output (input + context)
+    Q-->>D: actual_output (+ metadata)
+    D->>J: Judge (input, actual_output, criteria/expected)
+    J-->>D: score + rationale (structured)
+    D->>R: Persist scores + artifacts

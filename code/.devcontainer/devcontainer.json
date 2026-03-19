@@ -1,0 +1,18 @@
+{
+  "name": "Go Reverse Engineering",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "settings": {
+    "terminal.integrated.defaultProfile.linux": "bash"
+  },
+  "extensions": [
+    "golang.Go",
+    "ms-vscode.cpptools",
+    "eamodio.gitlens",
+    "mhutchie.git-graph"
+  ],
+  "postCreateCommand": "go mod tidy",
+  "remoteUser": "vscode"
+}

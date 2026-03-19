@@ -1,0 +1,20 @@
+flowchart LR
+  subgraph OnDevice["On-Device (iOS)"]
+    App["App"] -->|local inference| Cactus["Cactus Engine (.cact)"]
+  end
+
+  subgraph Server["Server Side (GPU)"]
+    QwenSrv["Qwen3 Inference Server\n(OpenAI-compatible: vLLM/SGLang/NIM)"]
+    JudgeSrv["Llama2 Judge Server\n(OpenAI-compatible: vLLM/TRT-LLM/NIM)"]
+    ModelStore["Model Artifacts\n(HF/OCI/PVC)"]
+    ModelStore --> QwenSrv
+    ModelStore --> JudgeSrv
+  end
+
+  subgraph Eval["Evaluation"]
+    DeepEval["DeepEval Runner"] --> Results["Results (JSON / Confident AI)"]
+  end
+
+  App -->|remote fallback| QwenSrv
+  DeepEval -->|call under-test| QwenSrv
+  DeepEval -->|call judge| JudgeSrv

@@ -1,0 +1,18 @@
+flowchart TD
+    subgraph Token-Level Scheduling
+        A[Request 1 Tokens] --> B[GPU Allocation]
+        C[Request 2 Tokens] --> B
+        D[Request 3 Tokens] --> B
+        B --> E[Process Tokens Concurrently]
+    end
+
+    subgraph Session Partitioning
+        F[Session 1] --> G[Memory Allocation]
+        H[Session 2] --> G
+        I[Session 3] --> G
+        G --> J[Resource Isolation]
+    end
+
+    E --> K[Inference Results]
+    J --> K
+    K --> L[Hybrid Optimization]
