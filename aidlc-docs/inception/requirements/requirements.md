@@ -9,7 +9,7 @@
 
 ## Product Vision
 Build a domain-specific shopping planning assistant that supports hybrid inference:
-- on-device inference on iOS using Cactus inference engine and Qwen3-family models,
+- on-device inference on iOS using Cactus as a [[Model Inference Engine]] and Qwen3-family models,
 - server-side inference using `llm-d` as primary backend,
 - intelligent routing with on-device default and server fallback,
 - privacy-aware behavior with encrypted server communication and auditable server processing,
@@ -29,7 +29,7 @@ Build a domain-specific shopping planning assistant that supports hybrid inferen
 - A unified application API must abstract the inference path from product UX flows.
 
 ### FR-04 On-Device Inference
-- On-device inference must use Cactus inference engine in v1.
+- On-device inference must use Cactus as the on-device [[Model Inference Engine]] in v1.
 - On-device model family starts with Qwen3.
 - Integration mode is a native mobile wrapper around Cactus (no alternative engine in v1 path).
 

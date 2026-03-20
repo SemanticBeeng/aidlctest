@@ -13,4 +13,4 @@ X) Other (please describe after `[Answer]:`)
 Add design decisions for 
 - device side inference (Cactus vs. MLX vs. ExecuTorch)
 - model evaluations using with DeepEval 
-- inference server for DeepEval: vLLM vs Lemonade
+- [[Model Inference Server]] for DeepEval: vLLM vs Lemonade

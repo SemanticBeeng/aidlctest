@@ -5,6 +5,8 @@ Document a flexible architecture that supports **both on-device and server-side 
 - **LLM under test**: Qwen3
 - **LLM-as-a-judge**: Llama2
 
+Ubiquitous language for this design domain is defined in [aidlc-docs/designdomain/README.md](../../designdomain/README.md).
+
 This addendum is intentionally technology-agnostic at the top level, but makes **explicit best-effort MVP decisions** at the bottom.
 
 ---
@@ -12,26 +14,26 @@ This addendum is intentionally technology-agnostic at the top level, but makes *
 ## Technology Inventory (Engines, Frameworks, Servers, Tooling)
 This architecture intentionally keeps “model execution” behind standard interfaces so we can swap engines as constraints change.
 
-### On-device inference runtimes / engines
-- **Cactus**: on-device inference engine using proprietary `.cact` artifacts; supports hybrid routing concepts.
-- **ExecuTorch**: edge/mobile runtime using `.pte` artifacts; iOS-friendly deployment path.
-- **Apple MLX**: Apple/Metal-native tensor framework (Mac/iOS ecosystem), often used for local execution and experimentation.
+### On-device [[Model Inference Engine]]s
+- **Cactus**: on-device [[Model Inference Engine]] using proprietary `.cact` artifacts; supports hybrid routing concepts.
+- **ExecuTorch**: on-device [[Model Inference Engine]]/runtime using `.pte` artifacts; iOS-friendly deployment path.
+- **Apple MLX**: Apple/Metal-native [[Model Inference Engine]]/runtime (Mac/iOS ecosystem), often used for local execution and experimentation.
 
-### Server-side inference servers / runtimes
-- **vLLM**: high-throughput GPU inference server with token-level scheduling (continuous batching).
-- **SGLang**: serving runtime with strong batching/scheduling features (often OpenAI-compatible depending on deployment mode).
-- **TensorRT-LLM**: NVIDIA GPU inference optimization runtime (custom kernels, inflight batching, paged KV caching, quantization, speculative decoding) with an online serving mode.
-- **NVIDIA NIM**: packaged inference microservices that can use engines like TensorRT-LLM, vLLM, SGLang, etc., and exposes industry-standard APIs.
-- **Lemonade Server**: OpenAI-compatible local/server API for LLM inference (useful for lightweight deployments).
+### Server-side [[Model Inference Server]]s
+- **vLLM**: [[Model Inference Server]] with token-level scheduling (continuous batching).
+- **SGLang**: [[Model Inference Server]]/runtime with strong batching/scheduling features (often OpenAI-compatible depending on deployment mode).
+- **TensorRT-LLM**: [[Model Inference Engine]]/runtime with an online serving mode (can be deployed as a [[Model Inference Server]]).
+- **NVIDIA NIM**: packaged [[Model Inference Server]] microservices that can embed TensorRT-LLM, vLLM, SGLang, etc.
+- **Lemonade Server**: OpenAI-compatible [[Model Inference Server]] (useful for lightweight deployments).
 
 ### Model workflow / packaging
-- **Unsloth**: workflow framework for training + running + exporting models; helps reduce effective VRAM needs by enabling smaller artifacts (e.g., GGUF exports) and adapter-based workflows.
+- **Unsloth**: workflow framework for training + running + exporting models; helps reduce effective VRAM needs by enabling smaller artifacts (e.g., GGUF exports) and adapter-based workflows. In **MVP0 (D-EVAL-SUT-02)**, Unsloth also functions as the **in-process inference engine/runtime** that executes Qwen3 decoding inside the evaluation process.
 
 ### Evaluation / orchestration
 - **DeepEval**: evaluation framework (pytest-like) that drives model calls to the **SUT** and to a **judge LLM**.
 
 ### Privacy & security patterns
-- **PrivatemodeAI-style deployment pattern**: an **encryption / privacy proxy** in front of the inference server (commonly used with vLLM-style backends).
+- **PrivatemodeAI-style deployment pattern**: an **encryption / privacy proxy** in front of the [[Model Inference Server]] (commonly used with vLLM-style backends).
 - **ALS (Apple / on-device learning concepts)**: relevant to future personalization / private adaptation; not an inference server.
 
 ### Common compatibility layers
@@ -91,8 +93,8 @@ To keep the architecture flexible:
 
 ### 5) Privacy proxy pattern
 For sensitive deployments:
-- Put an encryption/proxy layer in front of inference servers.
-- Keep the inference engine unchanged; treat privacy as an orthogonal concern.
+- Put an encryption/proxy layer in front of [[Model Inference Server]]s.
+- Keep the [[Model Inference Engine]] unchanged; treat privacy as an orthogonal concern.
 
 ---
 
@@ -164,8 +166,8 @@ Text alternative (process):
 ## Explicit Design Decisions (Best-Effort MVP)
 These are the recommended defaults for the MVP, chosen for interoperability and operational simplicity.
 
-### Decision D-DEVICE-01: Default on-device inference engine is Cactus
-**Choice**: Use **Cactus** as the default on-device inference engine for the MVP.
+### Decision D-DEVICE-01: Default on-device [[Model Inference Engine]] is Cactus
+**Choice**: Use **Cactus** as the default on-device [[Model Inference Engine]] for the MVP.
 
 **Rationale**:
 - The mobile lane’s primary requirements are offline capability, low latency, and tight memory budgets; Cactus is purpose-built for this form factor.
@@ -257,6 +259,8 @@ Text alternative (on-device selection):
 ### Decision D-EVAL-SUT-02: MVP0 runs Qwen3-under-test inference in-process via Unsloth
 **Choice**: For the current MVP implementation (`code/unsloth_example_1/`), run the **LLM under test (Qwen3)** *in-process* in Python via Unsloth (`FastLanguageModel.from_pretrained(...)`) instead of calling a server endpoint.
 
+**Interpretation (terminology)**: In this MVP0 topology, Unsloth is acting as the [[Model Inference Engine]] (weights + tokenization + forward pass + decoding loop) embedded in-process. This is distinct from a [[Model Inference Server]] (e.g., vLLM) which externalizes that engine behind an HTTP API and adds scheduling/admission control.
+
 **Rationale**:
 - **Fast iteration**: removes a full operational surface (server lifecycle, networking, endpoint auth) while we stabilize datasets, prompts, metrics, and thresholds.
 - **Ground-truthing**: evaluation failures are easier to attribute to model behavior rather than serving configuration, batching policy, or HTTP/client issues.
@@ -279,7 +283,7 @@ This section explains **when to keep Qwen3 inference in-process** (D-EVAL-SUT-02
 
 ### What these two decisions actually control
 - **D-EVAL-SUT-02** controls *how the SUT output is produced*: local GPU inference inside the pytest process.
-- **D-SERVER-01** controls *how the SUT would be produced once served*: an OpenAI-compatible inference server (default vLLM) whose scheduling, KV cache, and admission control behavior are now part of the evaluation.
+- **D-SERVER-01** controls *how the SUT would be produced once served*: an OpenAI-compatible [[Model Inference Server]] (default vLLM) whose scheduling, KV cache, and admission control behavior are now part of the evaluation.
 
 ### MVP0 (in-process) is the best fit when the goal is “model quality correctness”
 Use D-EVAL-SUT-02 when the evaluation objective is primarily:

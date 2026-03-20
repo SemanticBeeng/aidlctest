@@ -57,7 +57,7 @@
 - `-X --xnnpack-extended-ops` — XNNPACK CPU backend with extended operations
 - `--metadata '{"get_bos_id":199999, "get_eos_ids":[200020,199999]}'` — Qwen3 tokenizer special tokens
 
-**Reuse Decision**: This is the **critical tension point** with our current architecture. Our design specifies **Cactus inference engine**. Note: Cactus v1 has moved from GGUF to a proprietary `.cact` format (see Section 3), making the gap wider than originally assumed. See Section 3 for architectural implications.
+**Reuse Decision**: This is the **critical tension point** with our current architecture. Our design specifies **Cactus as an on-device [[Model Inference Engine]]** (see Design Domain concept: [[Model Inference Engine]]). Note: Cactus v1 has moved from GGUF to a proprietary `.cact` format (see Section 3), making the gap wider than originally assumed. See Section 3 for architectural implications.
 
 ### 1.4 iOS Deployment Components (ExecuTorch Runtime)
 
@@ -138,7 +138,7 @@ From export logs:
 > `.cact` format, and built-in hybrid routing. All comparisons updated below.
 
 ### Current Architecture Assumption (CORRECTED)
-Our FR-04 and C02 specify **Cactus inference engine** with a native iOS wrapper. Cactus v1 is **NOT** a llama.cpp wrapper — it is a standalone engine with three layers:
+Our FR-04 and C02 specify **Cactus as an on-device model inference engine** with a native iOS wrapper. Cactus v1 is **NOT** a llama.cpp wrapper — it is a standalone engine with three layers:
 - **Cactus Engine**: Energy-efficient inference with OpenAI-compatible APIs (C/C++, Swift, Kotlin, Flutter), tool calling, auto RAG, NPU acceleration, INT4 quantization, and hybrid cloud handoff
 - **Cactus Graph**: Zero-copy computation graph with PyTorch-like API for custom models, optimized for RAM efficiency and lossless weight quantization
 - **Cactus Kernels**: Low-level ARM SIMD kernels optimized for Apple, Snapdragon, Google, Exynos, and MediaTek processors with custom attention kernels, KV-Cache quantization, and chunked prefill

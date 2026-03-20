@@ -8,6 +8,22 @@ On the device use cactus inference engine. In terms of LLM we start with Qwen3."
 
 ---
 
+## Design Domain - Ubiquitous Language Introduced
+**Timestamp**: 2026-03-20T15:06:39Z
+**User Input**: "Let us introduce an uniquitous language for the design domain.
+
+1. Create a `designdomain`  folder and a concepts folder underneath.
+
+2. Extract there these two designs concepts of `mode inference engine` and `model inference server` with these terminology definitions as separate topics/pages.
+
+3. Then document vllm, sglang, lemonade, and all the others model inference technologies from pov of these concepts.
+
+4. Then refactor all references in design decisions and rest of design to reference these abstract concepts."
+**AI Response**: "Created `aidlc-docs/designdomain/` with concept pages for Model Inference Engine and Model Inference Server, plus technology pages for vLLM, SGLang, Lemonade Server, TensorRT-LLM, NVIDIA NIM, ExecuTorch, Cactus, Apple MLX, Unsloth, and the PrivatemodeAI proxy pattern. Refactored architecture addendum, requirements, and supporting docs to reference these concepts consistently via links."
+**Context**: Documentation refactor to establish ubiquitous language.
+
+---
+
 ## Repo Maintenance Request - Changelog + Git Push
 **Timestamp**: 2026-03-19T23:07:19Z
 **User Input**: "document latest changes in changelog and push them to git repo"
