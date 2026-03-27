@@ -53,6 +53,10 @@ pods restart, volumes get reattached, and users re-open containers. The
 script must detect existing state (marker files, cached directories) and
 skip completed steps.
 
+**Note (Dagger logical flow)**: The same setup is documented as a componentized
+logical flow (Dagger-style) in `code/unsloth_example_1/training/RUNPOD_EVAL_WORKFLOW.md`.
+`setup.sh` is the executed implementation of that flow.
+
 ### 1.5 Single Configuration for Local and Cloud
 
 **Constraint**: The same `devcontainer.json` must work for both local

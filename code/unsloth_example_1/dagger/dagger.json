@@ -1,0 +1,5 @@
+{
+  "name": "unsloth-eval-setup",
+  "sdk": "python",
+  "source": "src"
+}

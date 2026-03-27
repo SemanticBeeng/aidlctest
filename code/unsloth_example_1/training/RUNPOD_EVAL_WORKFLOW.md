@@ -110,12 +110,13 @@ Text alternative (flow):
 |------|---------|
 | [`.devcontainer/Dockerfile`](../.devcontainer/Dockerfile) | Container image: PyTorch + CUDA + uv + SSH |
 | [`.devcontainer/devcontainer.json`](../.devcontainer/devcontainer.json) | VS Code dev container config: volumes, env vars, extensions |
-| [`.devcontainer/setup.sh`](../.devcontainer/setup.sh) | Post-create script: installs deps, caches datasets, checks GPU |
+| [`.devcontainer/setup.sh`](../.devcontainer/setup.sh) | Setup implementation run by devcontainer (implements the Dagger logical flow) |
 | [`training/evaluate_model.py`](evaluate_model.py) | Standalone evaluation orchestrator (10 metrics, 5 suites) |
 | [`tests/conftest.py`](../tests/conftest.py) | Session-scoped pytest fixtures for model/data/test-cases |
 | [`tests/test_model_quality.py`](../tests/test_model_quality.py) | 13 parametrized test classes (~210 tests) |
 | [`training/EVALUATIONS.md`](EVALUATIONS.md) | Detailed evaluation guide (metrics, thresholds, interpretation) |
 | [`pyproject.toml`](../pyproject.toml) | uv dependencies (deepeval, pytest, unsloth, etc.) |
+| [`dagger/`](../dagger/README.md) | Dagger setup pipeline (components + logical flow for deps + dataset prefetch) |
 
 ---
 
@@ -128,6 +129,65 @@ Text alternative (flow):
    - [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 4. **vLLM judge endpoint** (Llama 3) for LLM-as-judge metrics
 5. (Optional) **Confident AI login** for dashboard tracking: `deepeval login`
+
+---
+
+## Setup (Dagger-Oriented Logical Flow)
+
+The setup is documented as a **Dagger logical flow** (components + diagram) to make the steps explicit.
+The devcontainer executes the same flow via `.devcontainer/setup.sh` (implementation) during startup.
+
+### Components
+
+- **Eval runner image**: builds from `.devcontainer/Dockerfile`
+- **Dependency sync**: `uv sync` (uses `uv.lock` if present)
+- **Dataset prefetch**: downloads `OpenMathReasoning-mini` and `FineTome-100k`
+- **Cache volumes**:
+  - `eval-buildcache` → `/buildcache`
+  - `eval-datasets` → `/data`
+
+### Logical Flow
+
+1. Build the eval-runner image
+2. Mount cache volumes
+   - `eval-buildcache` → `/buildcache` (venv, uv cache, tool caches)
+   - `eval-datasets` → `/data` (HuggingFace datasets, eval results, optional model artifacts)
+3. Sync Python dependencies with `uv`
+4. Prefetch datasets (`OpenMathReasoning-mini`, `FineTome-100k`)
+
+### Logical Flow Diagram (Mermaid)
+
+```mermaid
+flowchart TD
+  Start["Setup logical flow"] --> Build["Build image"]
+  Build --> Mount["Mount caches"]
+  Mount --> Env["Configure uv env"]
+  Env --> Deps{"uv.lock?"}
+  Deps -->|Yes| SyncLocked["uv sync --locked"]
+  Deps -->|No| Sync["uv sync"]
+  SyncLocked --> Data["Prefetch datasets"]
+  Sync --> Data
+  Data --> Done["Setup complete"]
+
+  Start2["Config report"] --> Report["Print judge config"]
+```
+
+Text alternative (logical flow):
+1. The setup flow builds the eval-runner image from `.devcontainer/Dockerfile`.
+2. The pipeline mounts two cache volumes (`eval-buildcache` at `/buildcache`, `eval-datasets` at `/data`).
+3. It configures uv to use those cache locations.
+4. It syncs dependencies via `uv sync --locked` when `uv.lock` exists, otherwise `uv sync`.
+5. It downloads the evaluation datasets into the `/data` cache volume.
+6. A config report step prints which judge endpoint variables are set.
+
+### Executed Implementation
+
+The devcontainer runs the setup flow during startup via `.devcontainer/setup.sh`.
+To rerun setup manually:
+
+```bash
+bash .devcontainer/setup.sh
+```
 
 ---
 
@@ -148,7 +208,7 @@ in the **same data center region** you'll launch pods in:
 
 ## Step 1b: Sync Build Cache to RunPod (after local build)
 
-After opening the dev container locally (which runs `setup.sh` and
+After opening the dev container locally (which runs `.devcontainer/setup.sh`) and
 populates the `eval-buildcache` Docker volume), export and upload it to
 the RunPod network volume. This avoids rebuilding on the GPU pod.
 

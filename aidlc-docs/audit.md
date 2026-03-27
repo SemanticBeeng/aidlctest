@@ -8,6 +8,38 @@ On the device use cactus inference engine. In terms of LLM we start with Qwen3."
 
 ---
 
+## Cleanup - Dagger Logical Flow vs setup.sh Execution
+**Timestamp**: 2026-03-27T20:49:26Z
+**User Input**: "If the Dagger setup replaces the setup.sh, then cleanup everywhere"
+**AI Response**: "Cleaned up docs and messaging to avoid implying Dagger runs automatically at devcontainer startup. The RunPod workflow now treats Dagger as the logical-flow model (diagram + explanation) and explicitly states `.devcontainer/setup.sh` is the executed implementation during devcontainer startup. Removed Dagger command snippets from the RunPod workflow to prevent confusion in environments without a container runtime." 
+**Context**: Documentation and messaging consistency cleanup.
+
+---
+
+## Documentation Refactor - Move Dagger Flow Into RunPod Workflow
+**Timestamp**: 2026-03-27T20:41:28Z
+**User Input**: "Move all this Daffer logical flow documentation from Readme.md to under Setup (Dagger-Oriented Logical Flow)"
+**AI Response**: "Moved the Dagger components/logical flow documentation into the RunPod evaluation workflow doc under Setup (Dagger-Oriented Logical Flow), including a validated Mermaid flowchart and text alternative. Simplified dagger/README.md to a pointer and kept only usage commands there to avoid duplication."
+**Context**: Documentation-only refactor; Mermaid validated after insertion.
+
+---
+
+## Documentation Update - Dagger Logical Flow Diagram
+**Timestamp**: 2026-03-27T20:34:36Z
+**User Input**: "Document as mermaid diagrams the Dagger logical flow"
+**AI Response**: "Added a validated Mermaid flowchart diagram to the Dagger README that documents the componentized setup flow (image build → cache mounts → uv dependency sync → dataset prefetch) and the separate config-report path. Included a text alternative." 
+**Context**: Documentation-only change; Mermaid validated before insertion.
+
+---
+
+## Setup Rewrite - Dagger Components + Flow
+**Timestamp**: 2026-03-27T20:29:15Z
+**User Input**: "Rewrite  setup using Dagger, emphasizing components and logical flow"
+**AI Response**: "Added a Dagger module under code/unsloth_example_1/dagger/ that models setup as explicit components (eval-runner image build, uv dependency sync with cache volumes, dataset prefetch, config report) and updated the RunPod workflow doc to describe the Dagger-oriented logical flow and commands."
+**Context**: Documentation + pipeline scaffolding; complements existing devcontainer setup.sh.
+
+---
+
 ## Documentation Update - Runtime Environment Diagrams
 **Timestamp**: 2026-03-27T20:11:39Z
 **User Input**: "Document runtime environment to reflect the main model inference servers, hardware resources and models using mermaid deployment diagrams and sequence or process flow diagrams."

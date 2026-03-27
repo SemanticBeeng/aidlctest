@@ -5,6 +5,7 @@ set -euo pipefail
 
 echo "============================================"
 echo "  Dev Container Setup — RunPod Eval Runner"
+echo "  (Implements the Dagger logical flow documented in code/unsloth_example_1/training/RUNPOD_EVAL_WORKFLOW.md)"
 echo "============================================"
 
 # ── 1. Map generic env vars to tool-specific ones (uv) ──
