@@ -35,7 +35,7 @@ questions:
 5. **Does the exported .pte file match PyTorch model outputs?** (Export Parity — future)
 
 The pipeline uses **Confident AI's DeepEval** framework. DeepEval uses an
-**LLM-as-judge** approach — an external LLM (OpenAI GPT-4 by default) scores each
+**LLM-as-judge** approach — an external LLM scores each
 model output against custom evaluation criteria. This avoids brittle exact-match
 comparisons and handles the open-ended nature of reasoning and chat responses.
 
@@ -48,7 +48,7 @@ Traditional NLP metrics (BLEU, ROUGE, exact-match) fail for generative models:
 - Chain-of-thought coherence cannot be captured by n-gram overlap
 
 GEval (G-Evaluation) sends the model output plus custom evaluation criteria to
-GPT-4 and asks it to score on a 0–1 scale. This correlates far better with human
+the configured judge model and asks it to score on a 0–1 scale. This correlates far better with human
 judgment for open-ended generation tasks.
 
 ---
@@ -95,6 +95,8 @@ judgment for open-ended generation tasks.
    │  QAT Model   │            │  OpenAI API    │
    │ phone_model/ │            │  (LLM-judge)   │
    └──────────────┘            └────────────────┘
+
+NOTE: For this MVP, the "OpenAI API" box is an **OpenAI-compatible endpoint** served by vLLM (Llama 3 judge).
           │                              │
           ▼                              ▼
    ┌──────────────┐            ┌────────────────┐
@@ -116,33 +118,41 @@ You must have a trained model saved in `phone_model/` (produced by
 uv run python training/qwen3_phone_deployment.py
 ```
 
-### 2. OpenAI API Key
+### 2. LLM-as-Judge Endpoint (OpenAI-compatible; MVP uses vLLM)
 
 DeepEval's LLM-as-judge metrics require an external LLM to score outputs.
-By default this is OpenAI's GPT-4:
+
+For this MVP, we run **Llama 3** as a judge behind an **OpenAI-compatible vLLM server**.
+Configure the judge endpoint like this:
 
 ```bash
-export OPENAI_API_KEY="sk-..."
+export DEEPEVAL_JUDGE_BASE_URL="http://<judge-host>:8000/v1"
+export DEEPEVAL_JUDGE_MODEL="meta-llama/Meta-Llama-3-8B-Instruct"
+export DEEPEVAL_JUDGE_API_KEY="local-vllm"
+
+# Example from our MVP decision (separate judge pod named "judgepodforedgeai"):
+# export DEEPEVAL_JUDGE_BASE_URL="http://judgepodforedgeai:8000/v1"
 ```
 
-**Cost note**: Each evaluated test case makes 1–3 API calls to GPT-4.
-With default settings (100 math + 50 chat cases × multiple metrics),
-expect ~$2–5 per full evaluation run.
+**Cost note**: Each evaluated test case makes 1–3 judge calls. With vLLM on RunPod,
+the cost is primarily GPU time (no per-call OpenAI billing), but judge throughput
+and model size matter.
 
 ### 3. Python Dependencies
 
 ```bash
-uv sync --locked
+uv sync
 ```
 
 This installs `deepeval` and `pytest` from the dev dependency group in
-`pyproject.toml`, using exact versions from `uv.lock`.
+`pyproject.toml`. If you commit `uv.lock`, you can switch to `uv sync --locked`
+for reproducible installs.
 
 ### 4. Hardware
 
 - **GPU**: CUDA GPU required for model inference (loading Qwen3-0.6B)
 - **VRAM**: ~3–4 GB for single model, ~6–8 GB for regression (two models loaded)
-- **Internet**: Required for HuggingFace dataset downloads and OpenAI API
+- **Internet**: Required for HuggingFace dataset downloads (judge can be local)
 
 ### 5. (Optional) Confident AI Account
 
@@ -183,10 +193,10 @@ learned correct reasoning during training.
 **How it works**:
 1. Load held-out problems from `unsloth/OpenMathReasoning-mini` (COT split)
 2. Feed each problem to the QAT model
-3. Send (input, model_output, reference_solution) to GPT-4 as judge
-4. GPT-4 scores whether the final numerical answer matches (0–1 scale)
+3. Send (input, model_output, reference_solution) to the judge model
+4. The judge scores whether the final numerical answer matches (0–1 scale)
 
-**GEval criteria** (sent verbatim to GPT-4):
+**GEval criteria** (sent verbatim to the judge model):
 > "Determine if the actual output arrives at the same correct numerical answer
 > as the expected output. The reasoning steps may differ in style or order, but
 > the final numerical answer must match. Award full score if the final answer is
@@ -205,8 +215,8 @@ memorizing answers. This metric checks that the *reasoning process itself* is so
 
 **How it works**:
 1. Uses the same math test cases as Suite 1 (no extra inference needed)
-2. Send (input, model_output) to GPT-4 — note: no expected output needed
-3. GPT-4 evaluates logical coherence of the step-by-step process
+2. Send (input, model_output) to the judge model — note: no expected output needed
+3. The judge evaluates logical coherence of the step-by-step process
 
 **GEval criteria**:
 > "Evaluate whether the step-by-step reasoning is logically coherent,
@@ -280,13 +290,13 @@ GEval is DeepEval's primary custom metric type. It works by:
 1. You define **evaluation criteria** as a natural language string
 2. You specify which **test case parameters** the judge should consider
    (input, actual_output, expected_output)
-3. DeepEval sends a structured prompt to GPT-4 with the criteria and test case data
-4. GPT-4 returns a score from 0 to 1
+3. DeepEval sends a structured prompt to the judge model with the criteria and test case data
+4. The judge model returns a score from 0 to 1
 5. If the score ≥ threshold, the test case passes
 
 **Configurable parameters** (in `build_metrics()` in `evaluate_model.py`):
 - `name`: Human-readable label for reports
-- `criteria`: The evaluation rubric sent to GPT-4
+- `criteria`: The evaluation rubric sent to the judge model
 - `evaluation_params`: Which `LLMTestCaseParams` to include
 - `threshold`: Minimum passing score (0–1)
 
@@ -647,11 +657,16 @@ uv run deepeval test run tests/test_model_quality.py
 
 ### Common Issues
 
-**`OPENAI_API_KEY not set`**
+**`DEEPEVAL_JUDGE_* not set`**
 ```bash
-export OPENAI_API_KEY="sk-..."
+export DEEPEVAL_JUDGE_BASE_URL="http://<judge-host>:8000/v1"
+export DEEPEVAL_JUDGE_MODEL="meta-llama/Meta-Llama-3-8B-Instruct"
+export DEEPEVAL_JUDGE_API_KEY="local-vllm"
+
+# Example:
+# export DEEPEVAL_JUDGE_BASE_URL="http://judgepodforedgeai:8000/v1"
 ```
-DeepEval's LLM-as-judge metrics require an OpenAI API key. Without it,
+DeepEval's LLM-as-judge metrics require a reachable judge endpoint. Without it,
 all GEval, Relevancy, Toxicity, and Bias metrics will fail.
 
 **`phone_model/ not found`**
@@ -686,11 +701,12 @@ uv run pytest tests/test_model_quality.py -v
 pip install -e .
 ```
 
-**Rate limiting from OpenAI API**
-With 100+ test cases, you may hit API rate limits. Solutions:
-- Reduce sample count: `N_MATH_EVAL=20 N_CHAT_EVAL=10`
-- Add delay between calls (modify `generate_test_cases()`)
-- Use a higher-tier API key
+**Judge endpoint errors**
+If judge calls fail, verify:
+- The vLLM server is running and reachable from the eval runner container
+- `DEEPEVAL_JUDGE_BASE_URL` includes `/v1`
+- `DEEPEVAL_JUDGE_MODEL` matches what the server reports in `/v1/models`
+- If the client requires a key, set `DEEPEVAL_JUDGE_API_KEY` to a non-empty value
 
 **Tests pass but scores seem low**
 - Check that the model was trained for enough steps (`max_steps=100` is a demo)
@@ -705,7 +721,7 @@ With 100+ test cases, you may hit API rate limits. Solutions:
 | Model loading (QAT) | 30–60 seconds |
 | Math inference (100 samples) | 10–20 minutes (GPU-dependent) |
 | Chat inference (50 samples) | 5–10 minutes |
-| LLM-judge scoring (150 cases) | 5–15 minutes (API-dependent) |
+| LLM-judge scoring (150 cases) | 5–15 minutes (judge/GPU-dependent) |
 | **Total (default config)** | **20–45 minutes** |
 | Quick smoke test (10+5 samples) | 5–10 minutes |
 | Regression (doubles inference) | 40–90 minutes |

@@ -8,6 +8,22 @@ On the device use cactus inference engine. In terms of LLM we start with Qwen3."
 
 ---
 
+## Documentation Update - Runtime Environment Diagrams
+**Timestamp**: 2026-03-27T20:11:39Z
+**User Input**: "Document runtime environment to reflect the main model inference servers, hardware resources and models using mermaid deployment diagrams and sequence or process flow diagrams."
+**AI Response**: "Updated the RunPod evaluation workflow documentation with validated Mermaid diagrams: a deployment-style flowchart showing the eval runner GPU pod (in-process Qwen3 via Unsloth) and the separate judge GPU pod (vLLM OpenAI-compatible server serving Meta-Llama-3-8B-Instruct), plus a sequence diagram showing DeepEval calling the in-process SUT and the vLLM judge endpoint. Included text alternatives for both diagrams."
+**Context**: Documentation-only change; Mermaid validated before insertion.
+
+---
+
+## Clarification Applied - Judge vLLM (Llama 3) Endpoint
+**Timestamp**: 2026-03-20T20:23:11Z
+**User Input**: "Apply changes based on responses from judge-vllm-clarification-questions.md"
+**AI Response**: "Applied clarification answers: judge model set to Meta-Llama-3-8B-Instruct, judge deployed as a separate RunPod pod, and eval runner default judge base URL set to http://judgepodforedgeai:8000/v1. Updated devcontainer env defaults, evaluation config defaults, and RunPod/evaluation docs accordingly."
+**Context**: INCEPTION / Application Design; aligning implementation defaults to clarified deployment topology.
+
+---
+
 ## Design Domain - Ubiquitous Language Introduced
 **Timestamp**: 2026-03-20T15:06:39Z
 **User Input**: "Let us introduce an uniquitous language for the design domain.
@@ -392,5 +408,26 @@ Also added `deepeval = "*"` and `pytest = ">=7.0"` to dev dependencies in pyproj
 **User Input**: "Capture all instructions how to run evaluations code and human explanations"
 **AI Response**: Created `training/EVALUATIONS.md` — comprehensive evaluation guide covering: overview and LLM-as-judge rationale, architecture diagram, prerequisites (trained model, OpenAI API key, dependencies, hardware, Confident AI), file inventory, all 5 evaluation suites explained with GEval criteria text, metrics deep dive (GEval, built-in metrics, LLMTestCase), data pipeline and held-out strategy, 4 execution methods (standalone script, marimo, pytest, Python API), full configuration reference for EvalConfig and pytest fixtures, results interpretation with benchmark tables, Confident AI dashboard setup, and troubleshooting guide with expected timelines.
 **Context**: Documentation capture of all evaluation instructions and human-readable explanations.
+
+---
+
+## Documentation Refactor - Obsidian Wiki Links
+**Timestamp**: 2026-03-20T15:34:15Z
+**User Input**: "Always use double brackets like [[concept]] to reference all concepts like in an obsidian vault. Apply now to all design decisisons"
+**AI Response**: "Converted concept references to Obsidian-style [[...]] links across design decisions and design-domain documentation. Added Obsidian-resolvable concept pages (Model Inference Engine/Server) using space-containing filenames, updated remaining docs that referenced old concept file paths, and added backwards-compatibility notes to legacy kebab-case concept pages."
+**Context**: Documentation linking standardization. Extensions: Security Baseline disabled per aidlc-state.md; enforcement skipped.
+
+---
+
+## Design Decision - RunPod Split: In-Process SUT + vLLM Judge
+**Timestamp**: 2026-03-20T19:55:14Z
+**User Input**: "We are still in design.
+Based on this analysis \"Decision Criteria: D-EVAL-SUT-02 vs D-SERVER-01 (MVP Qwen3 DeepEval in code/unsloth_example_1/)\", I decide that:
+- LLM SUT in-process with RunPod GPU
+- LLM as judge Llama 3 in vLLM, also with RunPod GPU
+Adapt the devcontainer implementation based on these choices.
+Advise if anything missing or ambiguous."
+**AI Response**: "Updated the Unsloth eval runner devcontainer and evaluation pipeline to assume SUT inference remains in-process (Unsloth) while LLM-as-judge metrics use an OpenAI-compatible endpoint (intended: vLLM serving Llama 3). Implemented judge endpoint configuration via DEEPEVAL_JUDGE_* env vars (base URL, model, API key) with best-effort mapping to common OpenAI-compatible env var names. Refactored documentation and test descriptions to remove hard-coded GPT-4/OpenAI assumptions. Added a clarification question file for remaining ambiguities (judge model variant, deployment topology, base URL)."
+**Context**: INCEPTION / Application Design iteration; devcontainer adaptation for MVP evaluation topology.
 
 ---

@@ -48,6 +48,29 @@ from unsloth import FastLanguageModel
 from unsloth.chat_templates import standardize_sharegpt
 
 
+def _configure_llm_judge_env(cfg: "EvalConfig") -> None:
+    """Best-effort configuration for DeepEval LLM-as-judge.
+
+    DeepEval uses OpenAI-compatible providers for LLM-as-judge metrics.
+    Different DeepEval/OpenAI client versions look for slightly different
+    environment variable names.
+
+    We set defaults only (do not override user-supplied values).
+    """
+
+    if getattr(cfg, "judge_base_url", None):
+        # Common conventions across OpenAI-compatible clients
+        os.environ.setdefault("OPENAI_BASE_URL", cfg.judge_base_url)
+        os.environ.setdefault("OPENAI_API_BASE", cfg.judge_base_url)
+
+    if getattr(cfg, "judge_api_key", None):
+        os.environ.setdefault("OPENAI_API_KEY", cfg.judge_api_key)
+
+    if getattr(cfg, "judge_model", None):
+        os.environ.setdefault("OPENAI_MODEL", cfg.judge_model)
+        os.environ.setdefault("DEEPEVAL_JUDGE_MODEL", cfg.judge_model)
+
+
 @dataclass
 class EvalConfig:
     """Evaluation configuration with sensible defaults."""
@@ -85,6 +108,14 @@ class EvalConfig:
     skip_base_model: bool = False
     skip_export_parity: bool = True  # requires .pte file
 
+    # LLM-as-judge configuration (OpenAI-compatible endpoint)
+    # Intended MVP: Llama 3 served via vLLM on RunPod.
+    judge_base_url: str = os.environ.get(
+        "DEEPEVAL_JUDGE_BASE_URL", "http://judgepodforedgeai:8000/v1"
+    )
+    judge_api_key: str = os.environ.get("DEEPEVAL_JUDGE_API_KEY", os.environ.get("OPENAI_API_KEY", "local-vllm"))
+    judge_model: str = os.environ.get("DEEPEVAL_JUDGE_MODEL", "meta-llama/Meta-Llama-3-8B-Instruct")
+
     # Datasets to hold out from (same sources as training)
     reasoning_dataset_name: str = "unsloth/OpenMathReasoning-mini"
     reasoning_split: str = "cot"
@@ -106,6 +137,8 @@ config = EvalConfig()
 # %%
 def build_metrics(cfg: EvalConfig) -> dict:
     """Build all DeepEval metric instances."""
+
+    _configure_llm_judge_env(cfg)
 
     math_correctness = GEval(
         name="Mathematical Correctness",

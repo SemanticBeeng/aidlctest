@@ -34,6 +34,76 @@ RunPod as network volumes.
 
 ---
 
+## Runtime Environment Diagrams
+
+### Deployment Diagram (Mermaid)
+
+```mermaid
+flowchart TB
+  subgraph Local["Local Machine"]
+    VSCode["VS Code + Remote SSH"]
+  end
+
+  subgraph RunPod["RunPod"]
+    subgraph EvalPod["Eval Runner Pod (GPU)"]
+      DevC["Devcontainer: pytest + DeepEval"]
+      SUT["SUT: Qwen3 via Unsloth (in-process)"]
+      BuildCache["/buildcache (eval-buildcache)"]
+      DataVol["/data (eval-datasets)"]
+    end
+
+    subgraph JudgePod["Judge Pod (GPU)"]
+      VLLM["vLLM OpenAI API\n:8000 (/v1)"]
+      Llama3["Model: Meta-Llama-3-8B-Instruct"]
+    end
+
+    HF["HuggingFace Hub"]
+  end
+
+  VSCode <--> DevC
+  DevC --> SUT
+  BuildCache --> DevC
+  DataVol --> DevC
+  DevC -->|HTTP| VLLM
+  VLLM --> Llama3
+  HF --> DevC
+  HF --> VLLM
+```
+
+Text alternative (deployment):
+- Local machine runs VS Code and connects to RunPod via Remote SSH.
+- **Eval Runner Pod (GPU)** runs the devcontainer that executes pytest/DeepEval; it runs **Qwen3 SUT inference in-process** via Unsloth.
+- **Judge Pod (GPU)** runs a **vLLM OpenAI-compatible server** on port `8000` serving **Meta-Llama-3-8B-Instruct**.
+- Eval runner calls the judge over HTTP at `DEEPEVAL_JUDGE_BASE_URL` (MVP default: `http://judgepodforedgeai:8000/v1`).
+- Both pods may pull models/datasets from HuggingFace Hub; eval runner persists build artifacts in `/buildcache` and datasets/results/models in `/data`.
+
+### Evaluation Flow (Mermaid Sequence)
+
+```mermaid
+sequenceDiagram
+  actor Dev as Developer
+  participant ER as Eval Runner (pytest + DeepEval)
+  participant SUT as Qwen3 SUT (Unsloth, in-process)
+  participant J as vLLM Judge API (judgepodforedgeai:8000/v1)
+  participant L3 as Llama 3 8B Instruct
+
+  Dev->>ER: Run test suite
+  ER->>SUT: Generate actual_output
+  SUT-->>ER: actual_output
+  ER->>J: POST /v1/chat/completions (judge prompt)
+  J->>L3: Run inference
+  L3-->>J: score + rationale
+  J-->>ER: score + rationale
+  ER-->>Dev: Pass/fail + metrics
+```
+
+Text alternative (flow):
+1. Developer runs the eval suite in the eval runner devcontainer.
+2. DeepEval generates model outputs by running Qwen3 in-process (Unsloth).
+3. For LLM-as-judge metrics, DeepEval sends a judge prompt to vLLM (`/v1/chat/completions`).
+4. vLLM runs the judge model (Llama 3 8B Instruct) and returns score/rationale.
+5. DeepEval reports pass/fail and aggregates metrics.
+
 ## File Reference
 
 | File | Purpose |
@@ -56,7 +126,7 @@ RunPod as network volumes.
 3. **VS Code** with these extensions installed locally:
    - [Remote - SSH](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh)
    - [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-4. **OpenAI API key** for LLM-as-judge metrics
+4. **vLLM judge endpoint** (Llama 3) for LLM-as-judge metrics
 5. (Optional) **Confident AI login** for dashboard tracking: `deepeval login`
 
 ---
@@ -127,8 +197,38 @@ dependency install step entirely.
    - `eval-datasets` → mount at `/data`
 4. **Expose ports**: `22` (SSH)
 5. **Environment Variables**:
-   - `OPENAI_API_KEY` = `sk-...`
+  - `DEEPEVAL_JUDGE_BASE_URL` = `http://<judge-host>:8000/v1`
+  - `DEEPEVAL_JUDGE_MODEL` = `meta-llama/Meta-Llama-3-8B-Instruct`
+  - `DEEPEVAL_JUDGE_API_KEY` = `local-vllm`
 6. Launch the pod
+
+### Step 2b (MVP): Launch the Judge Server (vLLM + Llama 3)
+
+For this MVP topology, run the judge as a separate OpenAI-compatible server.
+
+Recommended approach on RunPod: create a second pod dedicated to the judge and run vLLM there.
+
+Minimum configuration:
+- Expose port `8000` on the judge pod
+- Start vLLM with a Llama 3 instruct model
+
+Example vLLM command (judge pod):
+
+```bash
+# On the judge pod
+docker run --rm --gpus all --shm-size=8g -p 8000:8000 \
+  vllm/vllm-openai:latest \
+  --model meta-llama/Meta-Llama-3-8B-Instruct \
+  --host 0.0.0.0 --port 8000
+```
+
+Then, in the eval runner devcontainer, point DeepEval to the judge:
+
+```bash
+export DEEPEVAL_JUDGE_BASE_URL="http://judgepodforedgeai:8000/v1"
+export DEEPEVAL_JUDGE_MODEL="meta-llama/Meta-Llama-3-8B-Instruct"
+export DEEPEVAL_JUDGE_API_KEY="local-vllm"
+```
 
 ### Option B: runpodctl CLI
 
@@ -148,7 +248,9 @@ runpodctl create pod \
   --volumeMountPath "/buildcache" \
   --volumeId "vol_datasets" \
   --volumeMountPath "/data" \
-  --env "OPENAI_API_KEY=sk-..." \
+  --env "DEEPEVAL_JUDGE_BASE_URL=http://<judge-host>:8000/v1" \
+  --env "DEEPEVAL_JUDGE_MODEL=meta-llama/Meta-Llama-3-8B-Instruct" \
+  --env "DEEPEVAL_JUDGE_API_KEY=local-vllm" \
   --ports "22/tcp"
 ```
 
@@ -180,8 +282,8 @@ git clone https://github.com/SemanticBeeng/aidlctest.git .
    **"Reopen in Container"** — click it.
 
 6. The dev container builds, then runs [`setup.sh`](../.devcontainer/setup.sh):
-   - Runs `uv sync --locked` — if the build cache was synced from local
-     (Step 1b), this is a fast no-op (marker file exists, venv matches lockfile)
+   - Runs `uv sync` — if the build cache was synced from local
+     (Step 1b), this is a fast no-op (marker file exists, venv already populated)
    - Downloads datasets to `/data/huggingface/` (cached on network volume)
    - Verifies GPU and env vars
 
@@ -198,7 +300,7 @@ cd /workspace/code/unsloth_example_1
 uv run pytest tests/test_model_quality.py -v -k "TestMathCorrectness" --co | head -5
 ```
 
-### Full eval suite (~15 min, ~$2-5 OpenAI cost)
+### Full eval suite (~15 min, GPU-time dependent)
 
 ```bash
 uv run pytest tests/test_model_quality.py -v
@@ -218,7 +320,7 @@ uv run pytest tests/test_model_quality.py -v \
 # Multi-turn coherence
 uv run pytest tests/test_model_quality.py -v -k "TestMultiTurn"
 
-# Programmatic checks only (no OpenAI API calls)
+# Programmatic checks only (no judge calls)
 uv run pytest tests/test_model_quality.py -v \
   -k "TestThinkToken or TestExpectedAnswer or TestAnswerExtractability"
 ```
@@ -369,11 +471,11 @@ you need ~6-8 GB. Use a T4 (16 GB) or A10G (24 GB). Check usage:
 nvidia-smi
 ```
 
-### OpenAI API errors
+### Judge endpoint errors
 
-LLM-as-judge metrics require a valid `OPENAI_API_KEY`. Programmatic tests
+LLM-as-judge metrics require a reachable judge endpoint (vLLM). Programmatic tests
 (`TestThinkTokenUsage`, `TestExpectedAnswerMatch`, `TestAnswerExtractability`)
-run without an API key.
+run without a judge.
 
 ### VS Code can't find Python interpreter
 

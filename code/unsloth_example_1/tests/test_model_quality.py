@@ -26,7 +26,10 @@ Fixtures in conftest.py handle model loading and output generation once
 per session to avoid redundant GPU work.
 
 Requires:
-  - OPENAI_API_KEY env var (for LLM-as-judge metrics)
+    - LLM-as-judge endpoint configured via env vars (default assumes local vLLM):
+            - DEEPEVAL_JUDGE_BASE_URL (default: http://localhost:8000/v1)
+            - DEEPEVAL_JUDGE_MODEL (default: meta-llama/Meta-Llama-3-8B-Instruct)
+            - DEEPEVAL_JUDGE_API_KEY (optional; default: local-vllm)
   - Trained model in phone_model/ directory
 """
 
@@ -52,9 +55,10 @@ class TestMathCorrectness:
     """Does the QAT model produce correct final answers for math problems?
 
     Evaluates against held-out samples from unsloth/OpenMathReasoning-mini
-    (COT split). GPT-4 judges whether the final numerical answer matches
+    (COT split). The judge model scores whether the final numerical answer matches
     the reference solution, allowing for different reasoning paths.
     """
+
 
     @pytest.mark.parametrize("idx", range(20))
     def test_math_correctness(self, idx, math_test_cases, metrics):

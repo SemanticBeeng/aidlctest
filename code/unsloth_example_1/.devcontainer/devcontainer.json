@@ -33,7 +33,13 @@
     "EVAL_RESULTS_DIR": "/data/eval_results",
 
     // ── General ──
-    // "OPENAI_API_KEY": "" — set via RunPod secrets, .env, or export
+    // LLM-as-judge (default: local OpenAI-compatible endpoint such as vLLM)
+    // Override at runtime if you prefer OpenAI-hosted judges.
+    "DEEPEVAL_JUDGE_BASE_URL": "http://judgepodforedgeai:8000/v1",
+    "DEEPEVAL_JUDGE_MODEL": "meta-llama/Meta-Llama-3-8B-Instruct",
+    "DEEPEVAL_JUDGE_API_KEY": "local-vllm",
+
+    // "OPENAI_API_KEY": "" — optional; DeepEval will use DEEPEVAL_JUDGE_API_KEY by default
     "PYTHONPATH": "/workspace"
   },
 
